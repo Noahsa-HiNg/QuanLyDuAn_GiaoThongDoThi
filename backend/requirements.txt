@@ -1,0 +1,14 @@
+# Thư viện xử lý dữ liệu
+pandas>=2.2.0
+numpy>=1.26.4
+
+# Thư viện AI (Dùng dấu >= để pip tự chọn bản Wheel phù hợp nhất)
+scikit-learn>=1.4.0
+
+# Thư viện Giao diện & Bản đồ (Đã nới lỏng để tránh lỗi packaging)
+streamlit>=1.31.0
+pydeck>=0.8.0
+
+# Công cụ hỗ trợ sinh dữ liệu
+Faker==22.5.1
+packaging>=24.0
