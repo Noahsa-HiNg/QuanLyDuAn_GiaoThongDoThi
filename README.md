@@ -146,12 +146,16 @@ cp .env.example .env
 # (Xem phần Cấu hình môi trường bên dưới)
 
 # 4. Khởi động toàn bộ hệ thống
-docker-compose up --build
+docker compose up -d --build
 
-# 5. Truy cập ứng dụng
+# 5. ⚡ Setup dữ liệu (chạy 1 lần duy nhất sau khi clone)
+docker compose exec backend python data/seed_all.py
+
+# 6. Truy cập ứng dụng
 # 🌐 Frontend:  http://localhost:8501
 # 🔌 Backend:   http://localhost:8000
 # 📖 API Docs:  http://localhost:8000/docs
+# 🗄️ pgAdmin:   http://localhost:5050  (admin@admin.com / admin123)
 ```
 
 ### Cách 2: Chạy thủ công (Development)
