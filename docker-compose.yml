@@ -74,5 +74,23 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
 
+  # pgAdmin — Giao diện đồ họa để xem và quản lý PostgreSQL
+  # Truy cập: http://localhost:5050
+  # Chỉ dùng khi dev, không deploy lên production
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin  # Lưu cấu hình, không cần login lại mỗi lần
+
 volumes:
   postgres_data:
+  pgadmin_data:  # Volume cho pgAdmin
