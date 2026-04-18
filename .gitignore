@@ -1,0 +1,177 @@
+# ═══════════════════════════════════════
+# BIẾN MÔI TRƯỜNG & BÍ MẬT
+# ═══════════════════════════════════════
+.env
+.env.*
+!.env.example          # Giữ lại file mẫu để người khác biết cần khai báo gì
+
+# ═══════════════════════════════════════
+# PYTHON
+# ═══════════════════════════════════════
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+
+# Unit test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+nosetests.xml
+test-results/
+
+# MyPy / type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# ═══════════════════════════════════════
+# MACHINE LEARNING
+# ═══════════════════════════════════════
+# Model đã train — file nặng, không commit lên Git
+backend/ml/models/*.pkl
+backend/ml/models/*.joblib
+backend/ml/models/*.h5
+backend/ml/models/*.pt
+backend/ml/models/*.pth
+backend/ml/models/*.onnx
+
+# Giữ lại file metrics và thư mục (để cấu trúc không bị mất)
+!backend/ml/models/.gitkeep
+!backend/ml/models/metrics.json
+
+# Dataset
+*.csv
+*.parquet
+*.feather
+data/raw/
+data/processed/
+
+# MLflow / Weights & Biases
+mlruns/
+wandb/
+
+# ═══════════════════════════════════════
+# DOCKER
+# ═══════════════════════════════════════
+# Volume data (nếu mount ra ngoài)
+postgres_data/
+redis_data/
+
+# ═══════════════════════════════════════
+# DATABASE
+# ═══════════════════════════════════════
+*.sql.backup
+*.dump
+*.sqlite
+*.sqlite3
+*.db
+
+# Backup files
+backup_*.sql
+*.bak
+
+# Alembic (giữ lại migrations, bỏ cache)
+# Không ignore alembic/versions/ — cần commit migration files
+
+# ═══════════════════════════════════════
+# LOGS
+# ═══════════════════════════════════════
+*.log
+*.log.*
+logs/
+log/
+
+# ═══════════════════════════════════════
+# IDE & EDITOR
+# ═══════════════════════════════════════
+# VS Code
+.vscode/
+!.vscode/extensions.json   # Giữ lại danh sách extension gợi ý cho team
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+.netrwhist
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ═══════════════════════════════════════
+# NODE / FRONTEND BUILD (nếu dùng sau này)
+# ═══════════════════════════════════════
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dist/
+.next/
+.nuxt/
+
+# ═══════════════════════════════════════
+# CERTIFICATES & KEYS
+# ═══════════════════════════════════════
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+ssl/
+certs/
+
+# ═══════════════════════════════════════
+# TẠM THỜI & KHÁC
+# ═══════════════════════════════════════
+*.tmp
+*.temp
+*.swp
+.cache/
+tmp/
+temp/

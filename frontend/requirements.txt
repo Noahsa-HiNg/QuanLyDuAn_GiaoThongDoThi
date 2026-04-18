@@ -1,0 +1,19 @@
+# ── Framework giao diện ────────────────────────
+streamlit>=1.31.0
+
+# ── Bản đồ ─────────────────────────────────────
+pydeck>=0.8.0              # Render bản đồ Pydeck / Deck.gl
+
+# ── Biểu đồ ────────────────────────────────────
+plotly>=5.17.0             # Gauge chart, histogram, bar chart
+
+# ── Data ───────────────────────────────────────
+pandas>=2.2.0
+numpy>=1.26.4
+
+# ── HTTP Client (gọi backend API) ──────────────
+httpx>=0.27.0
+
+# ── Tiện ích ────────────────────────────────────
+streamlit-autorefresh>=1.0.0   # Auto-refresh trang mỗi N giây
+packaging>=24.0
