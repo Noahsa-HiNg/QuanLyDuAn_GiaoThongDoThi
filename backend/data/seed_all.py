@@ -43,9 +43,17 @@ def step1_migrate():
         capture_output=True, text=True
     )
     print(result.stdout)
+
     if result.returncode != 0:
-        print(result.stderr)
-        raise RuntimeError("Migration thất bại!")
+        # Nếu lỗi vì bảng đã tồn tại (DuplicateTable) → stamp version thôi
+        if "DuplicateTable" in result.stderr or "already exists" in result.stderr:
+            print("  ⚠ Bảng đã tồn tại → stamp version (không chạy lại migration)")
+            subprocess.run(["alembic", "stamp", "head"], check=True)
+        else:
+            print(result.stderr)
+            raise RuntimeError("Migration thất bại!")
+    else:
+        print("  Schema đã cập nhật.")
 
 
 def step2_seed_streets():
