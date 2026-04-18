@@ -100,6 +100,10 @@ backup_*.sql
 # Alembic (giữ lại migrations, bỏ cache)
 # Không ignore alembic/versions/ — cần commit migration files
 
+# Cache OSM geometry — PHẢI commit để đồng đội không gọi API lại
+# File này được tạo bởi seed_danang.py sau lần gọi Overpass đầu tiên
+!backend/data/osm_cache.json
+
 # ═══════════════════════════════════════
 # LOGS
 # ═══════════════════════════════════════
