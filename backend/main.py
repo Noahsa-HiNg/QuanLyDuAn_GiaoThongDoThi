@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 
 from routers import healthy
+from routers import streets
 
 # ─────────────────────────────────────────────────────────────
 # 1. KHỞI TẠO ỨNG DỤNG FASTAPI
@@ -32,7 +33,8 @@ app = FastAPI(
 # ─────────────────────────────────────────────────────────────
 # 2. MOUNT ROUTERS
 # ─────────────────────────────────────────────────────────────
-app.include_router(healthy.router, prefix="/api", tags=["Health"])
+app.include_router(healthy.router,  prefix="/api", tags=["Health"])
+app.include_router(streets.router,  prefix="/api", tags=["Streets"])
 
 # TODO: Thêm router theo từng sprint
 # app.include_router(traffic.router,   prefix="/api", tags=["Traffic"])
