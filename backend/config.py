@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_hours: int = 8
 
+    # --- API Keys traffic ---
+    tomtom_api_key: str = ""     # Đăng ký tại developer.tomtom.com (2500 req/ngày free)
+    goong_api_key: str = ""      # Đăng ký tại docs.goong.io      (1000 req/ngày free)
+
     class Config:
         env_file = ".env"
         case_sensitive = False

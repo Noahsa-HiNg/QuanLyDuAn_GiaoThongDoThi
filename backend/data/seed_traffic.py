@@ -39,6 +39,9 @@ DATABASE_URL = os.getenv(
 DAYS_BACK    = 7     # Sinh dữ liệu 7 ngày trước đến hiện tại
 INTERVAL_MIN = 60    # Cách nhau 60 phút mỗi bản ghi (= 24 bản ghi/ngày/đường)
 
+# Múi giờ Đà Nẵng: UTC+7
+TZ_DANANG = timezone(timedelta(hours=7))
+
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
 
@@ -46,11 +49,12 @@ Session = sessionmaker(bind=engine)
 # ─── MÔ HÌNH GIỜ CAO ĐIỂM ─────────────────────────────────────────────────────
 def get_congestion_factor(hour: int, is_weekend: bool) -> float:
     """
-    Trả về hệ số ùn tắc (0.0 → 1.0) theo giờ và ngày trong tuần.
+    Trả về hệ số ùn tắc (0.0 → 1.0) theo giờ ĐÀ NẴNG (UTC+7) và ngày trong tuần.
 
+    `hour` được truyền vào là giờ địa phương Đà Nẵng, không phải UTC.
     Càng cao → đường càng kẹt → avg_speed càng thấp.
 
-    Mô hình giao thông Đà Nẵng:
+    Mô hình giao thông Đà Nẵng (giờ địa phương):
         Cao điểm sáng  (7-9h)    : factor = 0.85–0.95
         Cao điểm chiều (16:30-18:30): factor = 0.80–0.92
         Giờ bình thường (9-16:30): factor = 0.30–0.55
@@ -115,9 +119,9 @@ def seed_traffic():
         print(f"🚗 Sinh mock traffic data cho {len(streets)} đường × {DAYS_BACK} ngày...")
         print(f"   Tổng ước tính: {len(streets) * 24 * DAYS_BACK:,} bản ghi\n")
 
-        # Thời gian bắt đầu = DAYS_BACK ngày trước, làm tròn về giờ đầu ngày
-        now = datetime.now(timezone.utc)
-        start_time = (now - timedelta(days=DAYS_BACK)).replace(
+        # Thời gian bắt đầu = DAYS_BACK ngày trước, theo giờ Đà Nẵng (UTC+7)
+        now_danang = datetime.now(TZ_DANANG)
+        start_danang = (now_danang - timedelta(days=DAYS_BACK)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
 
@@ -128,37 +132,34 @@ def seed_traffic():
         for street in streets:
             max_speed = street.max_speed or 50   # Fallback 50km/h nếu NULL
 
-            # Sinh từng time slot từ start_time đến now
-            current_time = start_time
-            while current_time <= now:
-                hour       = current_time.hour
-                is_weekend = current_time.weekday() >= 5  # 5=Sat, 6=Sun
+            # Sinh từng time slot từ start_danang đến now (giờ Đà Nẵng)
+            current_danang = start_danang
+            while current_danang <= now_danang:
+                # Lấy giờ và thứ theo múi giờ Đà Nẵng (đã có TZ_DANANG)
+                hour       = current_danang.hour
+                is_weekend = current_danang.weekday() >= 5
 
-                # Tính hệ số ùn tắc theo giờ
-                factor = get_congestion_factor(hour, is_weekend)
-
-                # Tốc độ thực tế = max_speed × (1 - factor) + nhiễu nhỏ
+                factor    = get_congestion_factor(hour, is_weekend)
                 raw_speed = max_speed * (1 - factor)
                 avg_speed = round(max(2.0, raw_speed + random.uniform(-3, 3)), 1)
-
                 congestion = calc_congestion_level(avg_speed, max_speed)
 
                 batch.append(TrafficData(
                     street_id        = street.id,
-                    timestamp        = current_time,
+                    # Lưu UTC vào DB (chuẩn quoc tế), DB tự quy đổi khi cần
+                    timestamp        = current_danang.astimezone(timezone.utc),
                     avg_speed        = avg_speed,
                     congestion_level = congestion,
                     source           = "simulated",
                 ))
 
-                # Flush batch khi đủ BATCH_SIZE
                 if len(batch) >= BATCH_SIZE:
                     db.bulk_save_objects(batch)
                     db.flush()
                     total_inserted += len(batch)
                     batch = []
 
-                current_time += timedelta(minutes=INTERVAL_MIN)
+                current_danang += timedelta(minutes=INTERVAL_MIN)
 
             print(f"  ✓ {street.name:<30} ({street.district.name if street.district else '?'})")
 
