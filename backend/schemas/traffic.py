@@ -27,8 +27,19 @@ class TrafficCurrentOut(BaseModel):
     congestion_label: Optional[str] = None
 
     source: Optional[str] = None
-    timestamp: Optional[datetime] = None         # Lưu trong DB (UTC)
-    timestamp_vn: Optional[str] = None           # Hiển thị giờ Đà Nẵng (+07:00)
+    timestamp: Optional[datetime] = None
+    timestamp_vn: Optional[str] = None
+
+    # Tọa độ điểm giữa (centroid) để fallback ScatterplotLayer
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+
+    # Mảng tọa độ đường thẳng cho PathLayer (khi chỉ có 1 zone)
+    path: Optional[list] = None
+
+    # Per-segment data (khi đường được chia thành nhiều zone)
+    # Mỗi phần tử: {segment_idx, path, avg_speed, congestion_level, color}
+    segments: list[dict] = []
 
     model_config = ConfigDict(from_attributes=True)
 

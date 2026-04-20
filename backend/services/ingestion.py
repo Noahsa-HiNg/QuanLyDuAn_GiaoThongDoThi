@@ -64,7 +64,7 @@ class QuotaTracker:
         self.limit = daily_limit
         self.count = 0
         self._today = date.today()
-        self._exhausted_today = False   # Đã hết quota hôm nay?
+        self._exhausted_today = False
 
     def _maybe_reset(self):
         today = datetime.now(TZ_DANANG).date()
@@ -72,20 +72,19 @@ class QuotaTracker:
             log.info(f"🔄 [{self.name}] Reset quota (ngày mới: {today})")
             self.count = 0
             self._today = today
-            self._exhausted_today = False  # Ngày mới → cho phép gọi lại
+            self._exhausted_today = False
 
     def use(self) -> bool:
         """Trả về True nếu còn quota, False nếu đã hết."""
         self._maybe_reset()
         if self.count >= self.limit:
             if not self._exhausted_today:
-                # Chỉ cảnh báo 1 lần, không spam log
                 next_reset = (datetime.now(TZ_DANANG) + timedelta(days=1)).replace(
                     hour=0, minute=0, second=0
                 )
                 log.warning(
                     f"⛔ [{self.name}] HẾT QUOTA hôm nay ({self.count}/{self.limit} req). "
-                    f"Tự động dừng gọi API. Reset lúc: {next_reset.strftime('%H:%M %d/%m')} +07:00"
+                    f"Reset lúc: {next_reset.strftime('%H:%M %d/%m')} +07:00"
                 )
                 self._exhausted_today = True
             return False
@@ -103,33 +102,111 @@ class QuotaTracker:
         return self._exhausted_today
 
 
-tomtom_quota = QuotaTracker("TomTom", TOMTOM_DAILY_LIMIT)
-goong_quota  = QuotaTracker("Goong",  GOONG_DAILY_LIMIT)
+class MultiKeyQuotaTracker:
+    """
+    Quản lý nhiều TomTom API key với tự động luân phiên (key rotation).
+
+    Cơ chế:
+      - Mỗi key có QuotaTracker riêng (2400 req/ngày)
+      - Khi key hiện tại hết quota → tự chuyển sang key tiếp theo
+      - Khi tất cả key hết quota → trả về None (bỏ qua chu kỳ)
+
+    Cấu hình trong .env:
+      TOMTOM_API_KEYS=key1,key2,key3
+      → Tổng quota: 3 × 2400 = 7200 req/ngày
+    """
+    def __init__(self, daily_limit: int = TOMTOM_DAILY_LIMIT):
+        self.daily_limit   = daily_limit
+        self._trackers: dict[str, QuotaTracker] = {}   # {api_key: QuotaTracker}
+        self._current_idx  = 0
+        self._keys: list[str] = []
+        self._reload_keys()
+
+    def _reload_keys(self):
+        """Load danh sách key từ settings (hỗ trợ add key khi đang chạy)."""
+        new_keys = settings.tomtom_keys_list
+        if new_keys != self._keys:
+            # Thêm tracker cho key mới, giữ tracker cũ
+            for k in new_keys:
+                if k not in self._trackers:
+                    self._trackers[k] = QuotaTracker(f"TomTom[{k[:8]}...]", self.daily_limit)
+            self._keys = new_keys
+            log.info(f"🔑 TomTom keys loaded: {len(self._keys)} key(s), "
+                     f"tổng quota: {len(self._keys) * self.daily_limit} req/ngày")
+
+    @property
+    def active_key(self) -> Optional[str]:
+        """Trả về key đang dùng, tự chuyển sang key tiếp nếu key hiện tại hết."""
+        self._reload_keys()
+        if not self._keys:
+            return None
+
+        # Thử các key từ vị trí hiện tại
+        for _ in range(len(self._keys)):
+            idx = self._current_idx % len(self._keys)
+            key = self._keys[idx]
+            tracker = self._trackers[key]
+
+            if not tracker.is_exhausted and tracker.use():
+                return key
+
+            # Key này hết quota → thử key tiếp
+            log.info(f"🔄 Key [{key[:8]}...] hết quota, thử key tiếp theo...")
+            self._current_idx += 1
+
+        # Tất cả key hết quota
+        return None
+
+    def mark_exhausted(self, key: str):
+        """Đánh dấu key bị 429 → chuyển sang key khác ngay."""
+        if key in self._trackers:
+            self._trackers[key]._exhausted_today = True
+            log.warning(f"⛔ Key [{key[:8]}...] bị 429 → đánh dấu hết quota, chuyển key")
+            self._current_idx += 1
+
+    @property
+    def is_exhausted(self) -> bool:
+        """True khi TẤT CẢ key đều hết quota hôm nay."""
+        if not self._keys:
+            return True
+        return all(self._trackers[k].is_exhausted for k in self._keys)
+
+    @property
+    def remaining(self) -> int:
+        """Tổng số request còn lại trên TẤT CẢ key."""
+        return sum(self._trackers[k].remaining for k in self._keys)
+
+    @property
+    def summary(self) -> str:
+        parts = []
+        for k in self._keys:
+            t = self._trackers[k]
+            parts.append(f"{k[:8]}...:{t.remaining}")
+        return " | ".join(parts) if parts else "Không có key"
+
+
+tomtom_quota = MultiKeyQuotaTracker()
+goong_quota  = QuotaTracker("Goong", GOONG_DAILY_LIMIT)
 
 
 # ─── 1. TOMTOM FLOW SEGMENT API ───────────────────────────────────────────────
 def fetch_tomtom(lat: float, lon: float) -> Optional[dict]:
     """
-    Gọi TomTom Flow Segment API để lấy:
-        - currentSpeed    : Tốc độ trung bình hiện tại (km/h)
-        - freeFlowSpeed   : Tốc độ khi không có tắc nghẽn (km/h)
-        - currentTravelTime / freeFlowTravelTime
-
-    Docs: https://developer.tomtom.com/traffic-api/api-explorer/traffic-flow/flow-segment-data
-
-    Trả về None nếu lỗi hoặc hết quota.
+    Gọi TomTom Flow Segment API.
+    Tự động dùng key tiếp theo nếu key hiện tại hết quota (MultiKeyQuotaTracker).
+    Trả về None nếu tất cả key đều hết hoặc lỗi.
     """
-    if not settings.tomtom_api_key:
-        return None
-    if not tomtom_quota.use():
-        log.warning("⛔ TomTom quota hết cho hôm nay")
+    # Lấy key đang active (tự động rotate nếu key cũ hết)
+    api_key = tomtom_quota.active_key
+    if not api_key:
+        log.warning("⛔ Tất cả TomTom key đã hết quota hôm nay")
         return None
 
     url = (
         f"https://api.tomtom.com/traffic/services/4/flowSegmentData"
         f"/absolute/10/json"
         f"?point={lat},{lon}"
-        f"&key={settings.tomtom_api_key}"
+        f"&key={api_key}"
         f"&unit=KMPH"
     )
     try:
@@ -143,9 +220,8 @@ def fetch_tomtom(lat: float, lon: float) -> Optional[dict]:
         }
     except requests.exceptions.HTTPError as e:
         if e.response is not None and e.response.status_code == 429:
-            # Server bảo vượt rate limit → đánh dấu hết quota, không gọi tiếp
-            log.warning("⛔ TomTom 429: Vượt rate limit. Đánh dấu hết quota.")
-            tomtom_quota._exhausted_today = True
+            # 429 → key này bị ban tạm thời → chuyển sang key tiếp
+            tomtom_quota.mark_exhausted(api_key)
         else:
             log.warning(f"TomTom HTTP error: {e}")
         return None
@@ -266,65 +342,120 @@ def get_street_centroid(street: Street, db: Session):
     return None, None
 
 
+# Số ZONE TỐI ĐA mỗi đường (càng nhiều → càng chi tiết → càng nhiều quota)
+# 4 zone × 49 đường = 196 calls/chu kỳ
+MAX_ZONES_PER_STREET = 4
+
+
+def get_street_path_coords(street: Street, db: Session) -> list:
+    """
+    Lấy danh sách tọa độ [[lon, lat], ...] của tuyến đường từ geometry PostGIS.
+    Trả về list rỗng nếu chưa có geometry.
+    """
+    from sqlalchemy import text
+    import json
+
+    row = db.execute(
+        text("""
+            SELECT (ST_AsGeoJSON(geometry)::json -> 'coordinates') AS coords
+            FROM streets
+            WHERE id = :sid AND geometry IS NOT NULL
+        """),
+        {"sid": street.id}
+    ).fetchone()
+
+    if not row or not row.coords:
+        return []
+
+    coords = json.loads(row.coords) if isinstance(row.coords, str) else row.coords
+    return coords if coords else []    # [[lon, lat], [lon, lat], ...]
+
+
 def ingest_street(street: Street, db: Session) -> bool:
     """
     Thu thập và lưu dữ liệu traffic cho 1 đường.
-    Ưu tiên TomTom → fallback Goong → bỏ qua nếu cả 2 đều fail.
-    Trả về True nếu lưu thành công.
-    """
-    # ── Lấy tọa độ điểm giữa từ geometry trong DB ────────────
-    lat, lon = get_street_centroid(street, db)
 
-    # Fallback: đọc từ STREETS_DATA nếu geometry chưa có
-    if lat is None or lon is None:
-        from data.seed_danang import STREETS_DATA
-        seed_coords = next(
-            (s for s in STREETS_DATA if s["name"] == street.name), None
-        )
-        if not seed_coords:
-            log.debug(f"  Không tìm thấy tọa độ cho '{street.name}'")
-            return False
-        lat, lon = seed_coords["lat"], seed_coords["lng"]
-        log.debug(f"  [{street.name}] Dùng seed coords (geometry chưa có trong DB)")
+    Nếu đường có geometry (nhiều điểm) → chia thành MAX_ZONES_PER_STREET zone
+    → gọi TomTom tại midpoint mỗi zone → lưu N bản ghi với segment_idx khác nhau.
+
+    Nếu đường không có geometry (fallback) → gọi 1 lần tại centroid seed coords.
+    Trả về số bản ghi đã lưu (>0 = thành công).
+    """
+    from utils.geometry import split_path_into_zones
 
     max_speed = street.max_speed or 50
+    now       = datetime.now(timezone.utc)
+    saved     = 0
 
-    # Thử TomTom trước
-    result = fetch_tomtom(lat, lon)
+    # ── Lấy tọa độ geometry từ DB ─────────────────────────────────────
+    coords = get_street_path_coords(street, db)
 
-    # Fallback Goong
-    if result is None:
-        result = fetch_goong(lat, lon, max_speed)
+    if coords and len(coords) >= 2:
+        # Đường có geometry → chia thành zone TỰ ĐỘNG theo độ dài
+        # split_path_into_zones() không có n_zones → tự tính (1 zone/500m)
+        from utils.geometry import calc_road_length_m
+        length_m = calc_road_length_m(coords)
+        zones = split_path_into_zones(coords)   # n_zones=None → auto
+        log.debug(
+            f"  [{street.name}] Dài {length_m/1000:.1f}km "
+            f"→ {len(zones)} zone(s)"
+        )
+    else:
+        # Không có geometry → dùng seed coords, chỉ 1 zone
+        from data.seed_danang import STREETS_DATA
+        seed = next((s for s in STREETS_DATA if s["name"] == street.name), None)
+        if not seed:
+            log.debug(f"  Không tìm thấy tọa độ cho '{street.name}'")
+            return False
+        zones = [{
+            "segment_idx": 0,
+            "mid_lat"    : seed["lat"],
+            "mid_lon"    : seed["lng"],
+        }]
+        log.debug(f"  [{street.name}] Dùng seed coords (chưa có geometry)")
 
-    if result is None:
-        log.debug(f"  [{street.name}] Không lấy được dữ liệu (cả 2 API fail)")
-        return False
+    # ── Gọi TomTom cho từng zone ──────────────────────────────────────
+    for zone in zones:
+        seg_idx = zone["segment_idx"]
+        lat     = zone["mid_lat"]
+        lon     = zone["mid_lon"]
 
-    avg_speed = result["avg_speed"]
-    source    = result["source"]
+        # Thử TomTom → fallback Goong
+        result = fetch_tomtom(lat, lon)
+        if result is None:
+            result = fetch_goong(lat, lon, max_speed)
+        if result is None:
+            log.debug(f"  [{street.name}] Zone {seg_idx}: API fail, bỏ qua")
+            continue
 
-    # Dùng freeFlowSpeed của TomTom làm chuẩn so sánh (chính xác hơn max_speed DB)
-    # freeFlowSpeed = tốc độ thực tế khi đường thông thoáng (không phải giới hạn pháp lý)
-    # Nếu không có (Goong fallback) → dùng max_speed từ DB
-    reference_speed = result.get("free_flow_speed") or max_speed
-    congestion = calc_congestion_level(avg_speed, reference_speed)
+        avg_speed = result["avg_speed"]
+        source    = result["source"]
+        ref_speed = result.get("free_flow_speed") or max_speed
+        congestion = calc_congestion_level(avg_speed, ref_speed)
 
-    # Lưu vào DB
-    record = TrafficData(
-        street_id        = street.id,
-        timestamp        = datetime.now(timezone.utc),
-        avg_speed        = avg_speed,
-        congestion_level = congestion,
-        source           = source,
-    )
-    db.add(record)
+        record = TrafficData(
+            street_id        = street.id,
+            segment_idx      = seg_idx,
+            timestamp        = now,
+            avg_speed        = avg_speed,
+            congestion_level = congestion,
+            source           = source,
+        )
+        db.add(record)
+        saved += 1
 
-    label = {0: "🟢", 1: "🟡", 2: "🔴"}[congestion]
-    log.info(
-        f"  {label} {street.name:<30} {avg_speed:>5.1f} km/h "
-        f"[{source}] (TomTom còn {tomtom_quota.remaining} req)"
-    )
-    return True
+        label = {0: "🟢", 1: "🟡", 2: "🔴"}[congestion]
+        log.info(
+            f"  {label} {street.name:<25} zone{seg_idx} "
+            f"{avg_speed:>5.1f} km/h [{source}] "
+            f"(quota: {tomtom_quota.summary})"
+        )
+
+        # Delay nhỏ giữa các zone của cùng 1 đường
+        if len(zones) > 1:
+            time.sleep(0.5)
+
+    return saved > 0
 
 
 # ─── 5. MỘT VÒNG THU THẬP ─────────────────────────────────────────────────────

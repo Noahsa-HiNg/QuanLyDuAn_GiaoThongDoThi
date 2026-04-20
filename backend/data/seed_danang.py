@@ -12,6 +12,7 @@ LOGIC:
 
 import sys, os, re, json, math, requests
 from pathlib import Path
+from data.manual_coords import MANUAL_COORDS
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
@@ -101,6 +102,14 @@ STREETS_DATA = [
 
 
 # ─── BƯỚC 1: LẤY GEOMETRY (từ cache hoặc Overpass) ────────────────────────────
+def coords_to_wkt(coords: list) -> str:
+    """
+    Chuyển danh sách [[lon, lat], ...] từ manual_coords.py sang WKT LINESTRING.
+    Ví dụ: [[108.22, 16.06], [108.23, 16.07]] → "LINESTRING(108.22 16.06, 108.23 16.07)"
+    """
+    pts_str = ", ".join(f"{lon} {lat}" for lon, lat in coords)
+    return f"LINESTRING({pts_str})"
+
 def get_geometries() -> dict:
     """
     Trả về dict {tên_đường: "LINESTRING(...)"}
@@ -235,23 +244,42 @@ def seed():
         osm_ok = 0
         fallback_ok = 0
 
+        manual_ok = 0
+
         for i, s in enumerate(STREETS_DATA, 1):
             d_id = district_map[s["district"]]
 
-            if s["name"] in geometries:
+            manual_pts = MANUAL_COORDS.get(s["name"], [])
+
+            if manual_pts and len(manual_pts) >= 2:
+                # ── Ưu tiên 1: Tọa độ thủ công từ manual_coords.py ──────
+                wkt = coords_to_wkt(manual_pts)
+                tag = f"✏ manual({len(manual_pts)} pts)"
+                manual_ok += 1
+                # Tính length_km thực từ geometry manual bằng Haversine
+                pts = re.findall(r"(-?[\d.]+)\s+(-?[\d.]+)", wkt)
+                length_km = sum(
+                    haversine_km(float(pts[j][1]), float(pts[j][0]),
+                                 float(pts[j+1][1]), float(pts[j+1][0]))
+                    for j in range(len(pts)-1)
+                )
+                length_km = round(length_km, 2)
+
+            elif s["name"] in geometries:
+                # ── Ưu tiên 2: Geometry từ Overpass OSM cache ───────────
                 wkt = geometries[s["name"]]
                 tag = "✓ OSM"
                 osm_ok += 1
-                # Tính length_km thực từ geometry OSM bằng Haversine
                 pts = re.findall(r"(-?[\d.]+)\s+(-?[\d.]+)", wkt)
                 length_km = sum(
-                    haversine_km(float(pts[i][1]), float(pts[i][0]),
-                                 float(pts[i+1][1]), float(pts[i+1][0]))
-                    for i in range(len(pts)-1)
+                    haversine_km(float(pts[j][1]), float(pts[j][0]),
+                                 float(pts[j+1][1]), float(pts[j+1][0]))
+                    for j in range(len(pts)-1)
                 )
                 length_km = round(length_km, 2)
+
             else:
-                # Fallback: dùng chiều dài đã hardcode trong STREETS_DATA
+                # ── Ưu tiên 3: Fallback đường thẳng ước tính ──────────
                 length_km = s.get("km", 1.0)
                 wkt = fallback_linestring(s["lat"], s["lng"], km=length_km)
                 tag = f"〜 fallback({length_km}km)"
@@ -277,6 +305,7 @@ def seed():
         # Báo cáo
         print(f"\n{'='*52}")
         print(f"  ✅ SEED HOÀN TẤT")
+        print(f"     Thủ công  : {manual_ok} đường  ← manual_coords.py")
         print(f"     Từ OSM    : {osm_ok} đường")
         print(f"     Fallback  : {fallback_ok} đường")
         print(f"{'='*52}")

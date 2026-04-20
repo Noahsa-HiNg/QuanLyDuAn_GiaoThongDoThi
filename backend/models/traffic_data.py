@@ -31,9 +31,13 @@ class TrafficData(Base):
     # Dùng BigInteger vì bảng time-series sẽ có hàng triệu bản ghi
     id = Column(BigInteger, primary_key=True, autoincrement=True)
 
-    # FK → streets.id — bản ghi này đo tuyến đường nào
-    # nullable=False: bắt buộc phải có — không cho phép NULL
+    # FK → streets.id
     street_id = Column(Integer, ForeignKey("streets.id"), nullable=False)
+
+    # Index đoạn đường (0 = đoạn đầu, 1 = đoạn giữa, ...)
+    # Mỗi đường được chia thành N zone, mỗi zone có 1 bản ghi traffic riêng.
+    # segment_idx=0 là mặc định (1 đoạn = toàn bộ đường, legacy)
+    segment_idx = Column(Integer, nullable=False, default=0)
 
     # TIMESTAMPTZ (timestamp with time zone):
     #   - Lưu kèm thông tin timezone → tránh bug khi server đổi múi giờ
@@ -74,11 +78,9 @@ class TrafficData(Base):
             name="check_congestion_level_valid"
         ),
 
-        # ★ INDEX quan trọng nhất hệ thống:
-        #   Khi query "dữ liệu mới nhất của đường X":
-        #   SELECT * FROM traffic_data WHERE street_id=X ORDER BY timestamp DESC LIMIT 1
-        #   Index này giúp truy vấn chạy ~100x nhanh hơn so với không có index
-        Index("idx_traffic_street_time", "street_id", "timestamp"),
+        # Index composite: (street_id, segment_idx, timestamp)
+        # Tối ưu query "latest traffic của mỗi đoạn đường"
+        Index("idx_traffic_street_seg_time", "street_id", "segment_idx", "timestamp"),
     )
 
     # ─── RELATIONSHIPS ────────────────────────────────────────

@@ -19,8 +19,30 @@ class Settings(BaseSettings):
     jwt_expire_hours: int = 8
 
     # --- API Keys traffic ---
-    tomtom_api_key: str = ""     # Đăng ký tại developer.tomtom.com (2500 req/ngày free)
-    goong_api_key: str = ""      # Đăng ký tại docs.goong.io      (1000 req/ngày free)
+    # Single key (backward-compat)
+    tomtom_api_key: str = ""     # Key chính
+    goong_api_key: str = ""      # Đăng ký tại docs.goong.io (1000 req/ngày free)
+
+    # Multi-key TomTom: điền nhiều key cách nhau bằng dấu phẩy
+    # Ví dụ: TOMTOM_API_KEYS=key1,key2,key3
+    # Hệ thống tự động luân phiên key khi 1 key hết quota
+    tomtom_api_keys: str = ""    # Danh sách key, ngăn cách bằng dấu phẩy
+
+    @property
+    def tomtom_keys_list(self) -> list[str]:
+        """
+        Trả về list tất cả TomTom key hợp lệ.
+        Ưu tiên TOMTOM_API_KEYS (multi), fallback về TOMTOM_API_KEY (single).
+        """
+        # Từ TOMTOM_API_KEYS (multi-key)
+        if self.tomtom_api_keys:
+            keys = [k.strip() for k in self.tomtom_api_keys.split(",") if k.strip()]
+            if keys:
+                return keys
+        # Fallback: TOMTOM_API_KEY (single)
+        if self.tomtom_api_key:
+            return [self.tomtom_api_key]
+        return []
 
     class Config:
         env_file = ".env"
