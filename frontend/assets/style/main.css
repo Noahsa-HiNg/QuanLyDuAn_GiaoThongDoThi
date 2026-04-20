@@ -1,0 +1,364 @@
+/* =============================================================
+   assets/style.css — Dark Glassmorphism Premium Theme
+   v2.0 — Redesign: Apple Vision Pro style + ambient blobs
+   ============================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* ── Animations ──────────────────────────────────────────────── */
+@keyframes pulse-dot   { 0%,100%{opacity:1;box-shadow:0 0 8px #4ade80} 50%{opacity:.5;box-shadow:0 0 16px #4ade80} }
+@keyframes float-in    { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+@keyframes shimmer     { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+@keyframes card-glow   { 0%,100%{box-shadow:0 4px 24px rgba(102,126,234,.1)} 50%{box-shadow:0 4px 32px rgba(102,126,234,.2)} }
+
+/* ── Base Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── App Background ──────────────────────────────────────────── */
+.stApp,
+[data-testid="stAppViewContainer"] {
+    background: #080d1a !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    color: #e2e8f0 !important;
+}
+
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {
+    background: transparent !important;
+}
+
+/* ── Block container ─────────────────────────────────────────── */
+.block-container {
+    padding: 1.5rem 2.5rem 3rem !important;
+    max-width: 100% !important;
+    background: transparent !important;
+}
+
+/* ── Hide Streamlit chrome ───────────────────────────────────── */
+/* ── Hide Streamlit chrome (custom button ☰ thay thế native toggle) ── */
+#MainMenu                        { visibility: hidden !important; }
+.stDeployButton                  { display: none !important; }
+[data-testid="stDecoration"]     { display: none !important; }
+[data-testid="stToolbar"]        { visibility: hidden !important; }
+[data-testid="stHeader"]         { background: transparent !important; box-shadow: none !important; }
+/* Ẩn native toggle — nút ☰ custom sẽ thay thế */
+[data-testid="collapsedControl"] { display: none !important; }
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+section[data-testid="stSidebar"] {
+    background: rgba(8, 13, 26, 0.95) !important;
+    border-right: 1px solid rgba(255,255,255,0.06) !important;
+    box-shadow: 4px 0 30px rgba(0,0,0,.4) !important;
+    backdrop-filter: blur(20px) !important;
+}
+
+section[data-testid="stSidebar"] > div {
+    background: transparent !important;
+}
+
+section[data-testid="stSidebar"] .block-container {
+    padding: 1.5rem 1.25rem !important;
+}
+
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] p {
+    color: #94a3b8 !important;
+    font-size: 0.82rem !important;
+}
+
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 {
+    color: #f1f5f9 !important;
+}
+
+/* ── Selectbox ───────────────────────────────────────────────── */
+[data-testid="stSelectbox"] > div > div {
+    background: rgba(255,255,255,0.04) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 12px !important;
+    color: #e2e8f0 !important;
+    backdrop-filter: blur(10px) !important;
+    transition: all 0.25s ease !important;
+}
+
+[data-testid="stSelectbox"] > div > div:hover {
+    border-color: rgba(102,126,234,0.5) !important;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.1) !important;
+}
+
+[data-testid="stSelectbox"] svg { color: #64748b !important; }
+
+/* ── Dropdown list ───────────────────────────────────────────── */
+[data-testid="stSelectbox"] ul {
+    background: #0f172a !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 12px !important;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.stButton > button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 0.85rem !important;
+    letter-spacing: 0.02em !important;
+    padding: 0.55rem 1.25rem !important;
+    transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+    box-shadow: 0 4px 20px rgba(102,126,234,0.3) !important;
+    width: 100% !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.stButton > button::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    transition: left 0.5s ease;
+}
+
+.stButton > button:hover { transform: translateY(-2px) !important; box-shadow: 0 8px 32px rgba(102,126,234,0.5) !important; }
+.stButton > button:hover::before { left: 100%; }
+.stButton > button:active { transform: translateY(0) !important; }
+
+/* ── Divider ─────────────────────────────────────────────────── */
+hr { border: none !important; border-top: 1px solid rgba(255,255,255,0.06) !important; margin: 1rem 0 !important; }
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+.stSpinner > div { border-top-color: #667eea !important; }
+
+/* ── Dataframe ───────────────────────────────────────────────── */
+[data-testid="stDataFrame"] {
+    background: rgba(255,255,255,0.02) !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    backdrop-filter: blur(10px) !important;
+}
+
+/* ── Markdown text ───────────────────────────────────────────── */
+[data-testid="stMarkdownContainer"] p { color: #cbd5e1 !important; }
+[data-testid="stMarkdownContainer"] h1 { color: #f1f5f9 !important; }
+[data-testid="stMarkdownContainer"] h2 { color: #e2e8f0 !important; }
+[data-testid="stMarkdownContainer"] h3 { color: #94a3b8 !important; font-size: 0.9rem !important; }
+
+/* ── Alert boxes ─────────────────────────────────────────────── */
+[data-testid="stAlert"] {
+    background: rgba(255,255,255,0.03) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    backdrop-filter: blur(10px) !important;
+}
+
+/* ── Status dot ──────────────────────────────────────────────── */
+.status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    animation: pulse-dot 2s ease-in-out infinite;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+/* ═══════════════════════════════════════════════
+   KPI CARDS — Glassmorphism Premium
+   ═══════════════════════════════════════════════ */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-bottom: 1.5rem;
+    animation: float-in 0.6s ease-out both;
+}
+
+.kpi-card {
+    position: relative;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 20px;
+    padding: 22px 26px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    overflow: hidden;
+    cursor: default;
+    animation: card-glow 4s ease-in-out infinite;
+}
+
+/* Inner shimmer on hover */
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+
+.kpi-card:hover { transform: translateY(-6px); border-color: rgba(255,255,255,0.14) !important; }
+.kpi-card:hover::before { opacity: 1; }
+
+.kpi-icon {
+    font-size: 1.8rem;
+    width: 54px; height: 54px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 16px;
+    flex-shrink: 0;
+    transition: transform 0.3s ease;
+}
+.kpi-card:hover .kpi-icon { transform: scale(1.1) rotate(-5deg); }
+
+.kpi-body { flex: 1; min-width: 0; }
+.kpi-value {
+    font-size: 2.1rem;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 5px;
+    letter-spacing: -0.02em;
+}
+.kpi-label {
+    font-size: 0.78rem;
+    color: #64748b;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* Red card */
+.kpi-card.red { box-shadow: 0 8px 32px rgba(239,68,68,0.08), inset 0 1px 0 rgba(255,255,255,0.08); }
+.kpi-card.red .kpi-icon { background: rgba(239,68,68,0.12); box-shadow: 0 0 20px rgba(239,68,68,0.15); }
+.kpi-card.red .kpi-value { color: #f87171; }
+.kpi-card.red:hover { box-shadow: 0 20px 60px rgba(239,68,68,0.2); border-color: rgba(239,68,68,0.25) !important; }
+
+/* Green card */
+.kpi-card.green { box-shadow: 0 8px 32px rgba(34,197,94,0.08), inset 0 1px 0 rgba(255,255,255,0.08); }
+.kpi-card.green .kpi-icon { background: rgba(34,197,94,0.12); box-shadow: 0 0 20px rgba(34,197,94,0.15); }
+.kpi-card.green .kpi-value { color: #4ade80; }
+.kpi-card.green:hover { box-shadow: 0 20px 60px rgba(34,197,94,0.2); border-color: rgba(34,197,94,0.25) !important; }
+
+/* Blue card */
+.kpi-card.blue { box-shadow: 0 8px 32px rgba(102,126,234,0.08), inset 0 1px 0 rgba(255,255,255,0.08); }
+.kpi-card.blue .kpi-icon { background: rgba(102,126,234,0.12); box-shadow: 0 0 20px rgba(102,126,234,0.15); }
+.kpi-card.blue .kpi-value { color: #818cf8; }
+.kpi-card.blue:hover { box-shadow: 0 20px 60px rgba(102,126,234,0.25); border-color: rgba(102,126,234,0.3) !important; }
+
+/* ═══════════════════════════════════════════════
+   PAGE HEADER
+   ═══════════════════════════════════════════════ */
+.page-header {
+    padding: 8px 0 16px;
+    animation: float-in 0.5s ease-out;
+}
+.page-header h1 {
+    margin: 0 0 6px;
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #f1f5f9 30%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.page-meta {
+    font-size: 0.8rem;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* ═══════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════ */
+.app-footer {
+    margin-top: 2.5rem;
+    padding: 18px 0;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    text-align: center;
+    color: #334155;
+    font-size: 0.76rem;
+    letter-spacing: 0.03em;
+}
+.app-footer span { color: #667eea; font-weight: 600; }
+.app-footer a { color: #667eea; text-decoration: none; }
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .block-container { padding: 1rem !important; }
+}
+@media (max-width: 600px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════
+   SIDEBAR NAVIGATION — Apple / iOS style
+   ═══════════════════════════════════════════════ */
+
+/* Ẩn "app" entry point — chỉ là redirect entry, không có ý nghĩa nav */
+[data-testid="stSidebarNavItems"] li:first-child { display: none !important; }
+
+/* Container */
+[data-testid="stSidebarNav"] {
+    padding: 6px 0 !important;
+}
+
+[data-testid="stSidebarNavItems"] {
+    gap: 4px !important;
+}
+
+/* Mỗi nav link */
+[data-testid="stSidebarNavLink"] {
+    border-radius: 14px !important;
+    padding: 11px 16px !important;
+    margin: 1px 4px !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    color: #94a3b8 !important;
+    letter-spacing: 0.01em !important;
+    transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    text-decoration: none !important;
+}
+
+/* Hover — kính mờ Apple style */
+[data-testid="stSidebarNavLink"]:hover {
+    background: rgba(255, 255, 255, 0.07) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    color: #f1f5f9 !important;
+    font-size: 1.0rem !important;
+    transform: translateX(3px) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Active / current page */
+[data-testid="stSidebarNavLink"][aria-current="page"] {
+    background: rgba(102, 126, 234, 0.16) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border-color: rgba(102, 126, 234, 0.28) !important;
+    color: #a5b4fc !important;
+    font-weight: 600 !important;
+    box-shadow: 0 4px 24px rgba(102, 126, 234, 0.12),
+                inset 0 1px 0 rgba(255,255,255,0.06) !important;
+}
+
+/* Icon trong nav link */
+[data-testid="stSidebarNavLink"] svg {
+    color: inherit !important;
+    opacity: 0.8 !important;
+}
