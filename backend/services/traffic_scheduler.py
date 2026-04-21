@@ -94,20 +94,24 @@ def run_crawl_cycle(db):
     """
     from models import Street, TrafficData
     from services.ingestion import (
-        fetch_tomtom, fetch_goong, calc_congestion_level,
+        fetch_tomtom, fetch_goong, calc_congestion_level,  # Fix #2: dùng fetch_tomtom chung
         tomtom_quota, goong_quota
     )
+    from services import cache as cache_svc   # Fix #1: invalidate cache sau crawl
     from utils.geometry import split_path_into_zones, calc_road_length_m
     from config import settings
 
-    # ── Kiểm tra quota ───────────────────────────────────────────────────────
+    # Fix #2: _call_tomtom() ĐÃ XÓA — dùng fetch_tomtom() từ ingestion.py bên trên.
+
+
+    # ── Kiểm tra quota ─────────────────────────────────────────────────────────────────────────────
     keys = settings.tomtom_keys_list
     if not keys:
         log.warning("⛔ Không có TOMTOM_API_KEY trong .env — bỏ qua chu kỳ")
         return 0
 
     if tomtom_quota.is_exhausted and goong_quota.is_exhausted:
-        log.warning("⛔ Cả TomTom và Goong đều HẾT QUOTA — reset lúc 00:00 +07")
+        log.warning("⛔ Cả TomTom và Goong đều HẼT QUOTA — reset lúc 00:00 +07")
         return 0
 
     # ── Xóa traffic cũ (CHỈ GIỮ bản ghi mới nhất cho từng segment) ──────────
@@ -131,6 +135,7 @@ def run_crawl_cycle(db):
     ts_now = now_vn()
     log.info(f"🌐 Bắt đầu cào {len(streets)} đường lúc {ts_now.strftime('%H:%M:%S %d/%m/%Y +07')}")
     log.info(f"   TomTom: {len(keys)} key(s) | Quota còn: {tomtom_quota.remaining} req")
+    log.info(f"   Chi tiết key: {tomtom_quota.summary}")
 
     LABEL = {0: "🟢", 1: "🟡", 2: "🔴"}
     success_cnt = 0
@@ -168,13 +173,15 @@ def run_crawl_cycle(db):
             lat     = zone["mid_lat"]
             lon     = zone["mid_lon"]
 
-            # TomTom → fallback Goong
+            # TomTom (tự rotate key khi gặp 403/429) → fallback Goong
+            # Fix #2: Dùng fetch_tomtom() từ ingestion.py (không copy lại)
             result = fetch_tomtom(lat, lon)
             src    = "tomtom"
             if result is None:
                 result = fetch_goong(lat, lon, max_speed)
                 src    = "goong"
             if result is None:
+                log.debug(f"  Cả TomTom và Goong đều thất bại tại ({lat:.4f},{lon:.4f}), bỏ qua")
                 continue
 
             avg_speed  = result["avg_speed"]
@@ -210,6 +217,11 @@ def run_crawl_cycle(db):
         time.sleep(0.8)  # Delay nhẹ giữa 2 đường
 
     db.commit()
+
+    # ── Fix #1: Xóa cache Redis sau mỏi chu kỳ để frontend đọc data mới nhất ──
+    cache_svc.invalidate_traffic()
+    log.info("🗑  Cache Redis đã xóa — lần gọi tiếp theo đọc từ DB")
+
     log.info(
         f"✅ Chu kỳ hoàn tất — "
         f"{success_cnt}/{len(streets)} đường | "

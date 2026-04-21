@@ -192,42 +192,65 @@ goong_quota  = QuotaTracker("Goong", GOONG_DAILY_LIMIT)
 # ─── 1. TOMTOM FLOW SEGMENT API ───────────────────────────────────────────────
 def fetch_tomtom(lat: float, lon: float) -> Optional[dict]:
     """
-    Gọi TomTom Flow Segment API.
-    Tự động dùng key tiếp theo nếu key hiện tại hết quota (MultiKeyQuotaTracker).
-    Trả về None nếu tất cả key đều hết hoặc lỗi.
-    """
-    # Lấy key đang active (tự động rotate nếu key cũ hết)
-    api_key = tomtom_quota.active_key
-    if not api_key:
-        log.warning("⛔ Tất cả TomTom key đã hết quota hôm nay")
-        return None
+    Gọi TomTom Flow Segment API — SOURCE OF TRUTH cho toàn bộ project.
 
-    url = (
-        f"https://api.tomtom.com/traffic/services/4/flowSegmentData"
-        f"/absolute/10/json"
-        f"?point={lat},{lon}"
-        f"&key={api_key}"
-        f"&unit=KMPH"
-    )
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json().get("flowSegmentData", {})
-        return {
-            "avg_speed"      : data.get("currentSpeed"),
-            "free_flow_speed": data.get("freeFlowSpeed"),
-            "source"         : "tomtom",
-        }
-    except requests.exceptions.HTTPError as e:
-        if e.response is not None and e.response.status_code == 429:
-            # 429 → key này bị ban tạm thời → chuyển sang key tiếp
-            tomtom_quota.mark_exhausted(api_key)
-        else:
-            log.warning(f"TomTom HTTP error: {e}")
-        return None
-    except Exception as e:
-        log.warning(f"TomTom error: {e}")
-        return None
+    Tự động xử lý:
+      - 429 → key hết quota  → chuyển sang key tiếp theo
+      - 403 → key không hợp lệ / bị khóa → chuyển sang key tiếp theo
+      Thử TẤT CẢ key trước khi trả về None.
+
+    Trả về None nếu:
+      - Tất cả key đều hết quota / không hợp lệ
+      - Lỗi mạng nghiêm trọng
+    """
+    n_keys = len(tomtom_quota._keys) if tomtom_quota._keys else 1
+
+    # Thử tối đa n_keys lần — mỗi lần một key khác nhau
+    for attempt in range(n_keys + 1):
+        api_key = tomtom_quota.active_key
+        if not api_key:
+            log.warning("⛔ Tất cả TomTom key đã hết quota / không hợp lệ")
+            return None
+
+        key_hint = f"{api_key[:8]}..."
+        url = (
+            f"https://api.tomtom.com/traffic/services/4/flowSegmentData"
+            f"/absolute/10/json"
+            f"?point={lat},{lon}"
+            f"&key={api_key}"
+            f"&unit=KMPH"
+        )
+        try:
+            resp = requests.get(url, timeout=10)
+
+            if resp.status_code == 429:
+                # 429 = Too Many Requests → key bị rate-limit → chuyển key tiếp
+                log.warning(f"⛔ TomTom 429: key [{key_hint}] hết quota → thử key tiếp")
+                tomtom_quota.mark_exhausted(api_key)
+                continue   # ← thử lại với key mới
+
+            if resp.status_code == 403:
+                # 403 = Forbidden → key không hợp lệ hoặc bị khóa → chuyển key tiếp
+                log.warning(f"⛔ TomTom 403: key [{key_hint}] bị từ chối → thử key tiếp")
+                tomtom_quota.mark_exhausted(api_key)
+                continue   # ← thử lại với key mới
+
+            resp.raise_for_status()
+            data = resp.json().get("flowSegmentData", {})
+            return {
+                "avg_speed"      : data.get("currentSpeed"),
+                "free_flow_speed": data.get("freeFlowSpeed"),
+                "source"         : "tomtom",
+            }
+
+        except requests.exceptions.HTTPError as e:
+            log.warning(f"TomTom HTTP error [{key_hint}]: {e}")
+            return None
+        except Exception as e:
+            log.warning(f"TomTom error [{key_hint}]: {e}")
+            return None
+
+    return None
 
 
 # ─── 2. GOONG DISTANCE MATRIX API ─────────────────────────────────────────────

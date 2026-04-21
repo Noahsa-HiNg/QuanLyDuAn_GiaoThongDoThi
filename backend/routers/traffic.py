@@ -1,16 +1,19 @@
 """
-routers/traffic.py — API giao thông thời gian thực
+routers/traffic.py — API giao thống thời gian thực
 
 Endpoints:
-    GET /api/traffic/current          Tình trạng giao thông mới nhất toàn TP
-    GET /api/traffic/current/{id}     Tình trạng mới nhất của 1 đường
+    GET  /api/traffic/current          Tình trạng giao thông mới nhất toàn TP
+    GET  /api/traffic/current/{id}     Tình trạng mới nhất của 1 đường
+    POST /api/traffic/crawl            Kích hoạt cào dữ liệu ngay (1 lần, chạy nền)
+    GET  /api/traffic/crawl/status     Xem trạng thái lần cào gần nhất
 """
 
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 import json
+import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
@@ -18,6 +21,7 @@ from database import get_db
 from models import Street, TrafficData
 from schemas.traffic import TrafficCurrentOut, TrafficSummaryOut, TZ_DANANG
 from utils.geometry import split_path_into_zones
+from services import cache as cache_svc   # Redis cache layer
 
 router = APIRouter()
 
@@ -198,7 +202,16 @@ def get_traffic_current(
     district_id: Optional[int] = Query(None, description="Lọc theo ID quận"),
     db: Session = Depends(get_db),
 ):
-    # ── Truy vấn tất cả đường (kèm district) ──────────────────
+    # ── Kiểm tra Redis cache (chỉ cache khi không filter district) ────────────
+    # Lý do không cache khi filter: mỗi district cho kết quả khác nhau
+    # → cần nhiều key cache → phức tạp không cần thiết
+    use_cache = (district_id is None)
+    if use_cache:
+        cached = cache_svc.get_traffic()
+        if cached is not None:
+            return cached   # ✅ Cache HIT — trả về ngay, không query DB
+
+    # ── Cache MISS → query DB bình thường ────────────────────────────────────
     street_query = db.query(Street).options(joinedload(Street.district))
     if district_id is not None:
         street_query = street_query.filter(Street.district_id == district_id)
@@ -267,7 +280,7 @@ def get_traffic_current(
     valid_speeds = [r.avg_speed for r in result_list if r.avg_speed is not None]
     avg_speed_city = round(sum(valid_speeds) / len(valid_speeds), 1) if valid_speeds else None
 
-    return TrafficSummaryOut(
+    response = TrafficSummaryOut(
         total_streets = len(result_list),
         green_count   = green,
         yellow_count  = yellow,
@@ -278,6 +291,12 @@ def get_traffic_current(
         streets       = result_list,
     )
 
+    # ── Lưu vào Redis cache (chỉ khi không filter district) ──────────────────
+    if use_cache:
+        # Pydantic → dict → JSON để lưu Redis
+        cache_svc.set_traffic(response.model_dump(mode="json"))
+
+    return response
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /api/traffic/current/{street_id} — 1 tuyến đường cụ thể
@@ -333,3 +352,88 @@ def get_traffic_current_by_street(
         full_path     = path_data,
         centroid      = centroid.get(street_id),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Trạng thái lần cào gần nhất (lưu in-memory, reset khi restart container)
+# ─────────────────────────────────────────────────────────────────────────────
+_crawl_status: dict = {
+    "running"         : False,
+    "last_started_at" : None,
+    "last_result"     : None,   # dict kết quả từ crawl_all_streets()
+}
+_crawl_lock = threading.Lock()
+
+
+def _run_crawl_in_background(db: Session):
+    """Hàm chạy trong background thread — cập nhật _crawl_status."""
+    global _crawl_status
+    try:
+        result = None
+        from services.traffic_crawl import crawl_all_streets
+        result = crawl_all_streets(db)
+    except Exception as e:
+        result = {"error": str(e)}
+    finally:
+        db.close()
+        with _crawl_lock:
+            _crawl_status["running"]     = False
+            _crawl_status["last_result"] = result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/traffic/crawl — Kích hoạt cào ngay (chạy nền)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post(
+    "/traffic/crawl",
+    summary="Kích hoạt cào dữ liệu traffic ngay lập tức (1 lần, chạy nền)",
+    description="""
+Cào dữ liệu TomTom cho **tất cả tuyến đường** đúng 1 lần.
+
+- Chạy **bất đồng bộ** (nền) — trả về response ngay, không cần chờ.
+- Gọi `GET /api/traffic/crawl/status` để xem kết quả sau khi hoàn tất.
+- Nếu đang có lần cào chạy dở → trả về **409 Conflict**.
+
+⏱ Thời gian ước tính: ~1–3 phút tùy số đường và quota.
+""",
+    status_code=202,
+)
+def trigger_crawl(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    global _crawl_status
+
+    with _crawl_lock:
+        if _crawl_status["running"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Đang có lần cào đang chạy. Vui lòng đợi hoàn tất.",
+            )
+        _crawl_status["running"]         = True
+        _crawl_status["last_started_at"] = datetime.now(
+            timezone(timedelta(hours=7))
+        ).strftime("%H:%M:%S %d/%m/%Y +07")
+
+    # Chạy nền để không block API
+    background_tasks.add_task(_run_crawl_in_background, db)
+
+    return {
+        "message"   : "✅ Đã khởi động cào dữ liệu traffic (đang chạy nền)",
+        "started_at": _crawl_status["last_started_at"],
+        "status_url": "/api/traffic/crawl/status",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/traffic/crawl/status — Xem trạng thái lần cào gần nhất
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get(
+    "/traffic/crawl/status",
+    summary="Trạng thái lần cào dữ liệu gần nhất",
+    description="Trả về trạng thái (đang chạy / hoàn tất) và kết quả tóm tắt của lần cào gần nhất.",
+)
+def get_crawl_status():
+    with _crawl_lock:
+        return {
+            "running"         : _crawl_status["running"],
+            "last_started_at" : _crawl_status["last_started_at"],
+            "last_result"     : _crawl_status["last_result"],
+        }
