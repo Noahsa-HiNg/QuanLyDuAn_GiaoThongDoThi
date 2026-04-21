@@ -1,34 +1,92 @@
 """
 shared/components/sidebar.py — Sidebar Bộ lọc + Chú thích
-v1.0
+v2.0 — Sprint 2
+
+SCRUM 22: Tìm kiếm tên đường (client-side filter)
+SCRUM 23: Lọc theo mức ùn tắc
+SCRUM 24: Lọc theo quận/huyện (giữ từ v1.0, pass district_id lên API)
+SCRUM 25: Nút Reset bộ lọc (session_state, không clear cache)
 """
 
 import streamlit as st
 
 
+# ── Dữ liệu tuỳ chọn ──────────────────────────────────────────────────────────
+
 DISTRICT_OPTIONS: dict[str, int | None] = {
     "🗺️ Tất cả quận/huyện": None,
-    "Hải Châu"      : 1,
-    "Thanh Khê"     : 2,
-    "Sơn Trà"       : 3,
-    "Ngũ Hành Sơn"  : 4,
-    "Liên Chiểu"    : 5,
-    "Cẩm Lệ"        : 6,
-    "Hòa Vang"      : 7,
-    "Hoàng Sa"      : 8,
+    "Hải Châu"             : 1,
+    "Thanh Khê"            : 2,
+    "Sơn Trà"              : 3,
+    "Ngũ Hành Sơn"         : 4,
+    "Liên Chiểu"           : 5,
+    "Cẩm Lệ"               : 6,
+    "Hòa Vang"             : 7,
+    "Hoàng Sa"             : 8,
 }
 
+CONGESTION_OPTIONS: dict[str, int | None] = {
+    "🔵 Tất cả mức"   : None,
+    "🟢 Thông thoáng" : 0,
+    "🟡 Chậm"         : 1,
+    "🔴 Kẹt xe"       : 2,
+}
 
-def render_sidebar() -> int | None:
+# Session state keys — prefix "sb_" tránh xung đột với widget khác
+_KEY_DISTRICT   = "sb_district"
+_KEY_CONGESTION = "sb_congestion"
+_KEY_SEARCH     = "sb_search"
+
+_DEFAULT_DISTRICT   = list(DISTRICT_OPTIONS.keys())[0]    # "🗺️ Tất cả quận/huyện"
+_DEFAULT_CONGESTION = list(CONGESTION_OPTIONS.keys())[0]   # "🔵 Tất cả mức"
+_DEFAULT_SEARCH     = ""
+
+
+# ── Session state helpers ──────────────────────────────────────────────────────
+
+def _init_session() -> None:
+    """Khởi tạo session state mặc định nếu chưa tồn tại."""
+    defaults = {
+        _KEY_DISTRICT   : _DEFAULT_DISTRICT,
+        _KEY_CONGESTION : _DEFAULT_CONGESTION,
+        _KEY_SEARCH     : _DEFAULT_SEARCH,
+    }
+    for key, val in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = val
+
+
+def _reset_filters() -> None:
+    """Đặt lại tất cả bộ lọc về mặc định — SCRUM 25."""
+    st.session_state[_KEY_DISTRICT]   = _DEFAULT_DISTRICT
+    st.session_state[_KEY_CONGESTION] = _DEFAULT_CONGESTION
+    st.session_state[_KEY_SEARCH]     = _DEFAULT_SEARCH
+
+
+def _is_filtered() -> bool:
+    """True nếu có ít nhất 1 bộ lọc đang hoạt động."""
+    return (
+        st.session_state.get(_KEY_DISTRICT,   _DEFAULT_DISTRICT)   != _DEFAULT_DISTRICT
+        or st.session_state.get(_KEY_CONGESTION, _DEFAULT_CONGESTION) != _DEFAULT_CONGESTION
+        or st.session_state.get(_KEY_SEARCH,     _DEFAULT_SEARCH)     != _DEFAULT_SEARCH
+    )
+
+
+# ── Main render ───────────────────────────────────────────────────────────────
+
+def render_sidebar() -> tuple[int | None, str, int | None]:
     """
-    Render sidebar với:
-      - Logo + trạng thái hệ thống
-      - Selectbox chọn quận
-      - Chú thích màu sắc
-      - Nút làm mới
-    Trả về district_id đang chọn (None = tất cả).
+    Render sidebar với bộ lọc đầy đủ Sprint 2.
+
+    Returns:
+        district_id (int | None) — ID quận đang lọc; None = tất cả
+        search_text (str)        — Từ khoá tìm tên đường; "" = không lọc
+        congestion  (int | None) — Mức ùn tắc đang lọc; None = tất cả
     """
+    _init_session()
+
     with st.sidebar:
+
         # ── Header ──────────────────────────────────────────
         st.markdown("""
         <div style="text-align:center; padding: 8px 0 20px">
@@ -44,14 +102,50 @@ def render_sidebar() -> int | None:
 
         st.divider()
 
-        # ── Bộ lọc quận ─────────────────────────────────────
-        st.markdown("**🔽 Lọc theo quận/huyện**")
-        selected = st.selectbox(
-            label="Quận",
-            options=list(DISTRICT_OPTIONS.keys()),
+        # ── SCRUM-22: Tìm kiếm tên đường ────────────────────
+        st.markdown("**🔍 Tìm kiếm tên đường**")
+        search_text: str = st.text_input(
+            label="Tìm đường",
+            placeholder="VD: Bạch Đằng, Lê Duẩn...",
+            key=_KEY_SEARCH,
             label_visibility="collapsed",
         )
-        district_id = DISTRICT_OPTIONS[selected]
+
+        # ── SCRUM-24: Lọc theo quận ──────────────────────────
+        st.markdown("**📍 Lọc theo quận/huyện**")
+        district_label: str = st.selectbox(
+            label="Quận",
+            options=list(DISTRICT_OPTIONS.keys()),
+            key=_KEY_DISTRICT,
+            label_visibility="collapsed",
+        )
+        district_id = DISTRICT_OPTIONS[district_label]
+
+        # ── SCRUM-23: Lọc theo mức ùn tắc ──────────────────
+        st.markdown("**🚦 Lọc theo mức ùn tắc**")
+        congestion_label: str = st.selectbox(
+            label="Mức kẹt",
+            options=list(CONGESTION_OPTIONS.keys()),
+            key=_KEY_CONGESTION,
+            label_visibility="collapsed",
+        )
+        congestion_filter = CONGESTION_OPTIONS[congestion_label]
+
+        # ── SCRUM-25: Nút Reset bộ lọc ──────────────────────
+        # Dùng on_click callback thay vì set session_state bên trong if-block.
+        # Lý do: Streamlit không cho sửa session_state[key] sau khi widget
+        # với key đó đã được render trong cùng 1 script run.
+        # on_click chạy trước render tiếp theo → không xảy ra conflict.
+        filter_active = _is_filtered()
+        st.button(
+            "↩️ Reset bộ lọc",
+            use_container_width=True,
+            disabled=not filter_active,
+            type="secondary",
+            key="btn_reset_filter",
+            help="Đặt lại tất cả bộ lọc về mặc định",
+            on_click=_reset_filters,   # ← callback chạy trước render kế tiếp
+        )
 
         st.divider()
 
@@ -75,10 +169,10 @@ def render_sidebar() -> int | None:
         # ── Info ─────────────────────────────────────────────
         st.markdown("""
         <div style="font-size:0.75rem; color:#475569; line-height:1.8">
-            📡 Nguồn: TomTom Traffic API<br>
+            📡 Nguồn: TomTom + Goong API<br>
             🔄 Cập nhật: mỗi 60 giây<br>
             🗃️ DB: PostgreSQL + PostGIS
         </div>
         """, unsafe_allow_html=True)
 
-    return district_id
+    return district_id, search_text.strip(), congestion_filter

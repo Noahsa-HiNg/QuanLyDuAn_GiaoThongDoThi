@@ -1,6 +1,6 @@
 """
 features/map/service.py — Business Logic: Bản đồ Giao thông
-v1.2 — Fix dot: khi segments rỗng, dùng street.path trước khi fallback lat/lon
+v1.3 — Sync Sprint 2: backend luôn trả segments[] cho đường có geometry
 """
 
 import pandas as pd
@@ -24,14 +24,13 @@ def build_map_dataframe(traffic_data: dict) -> pd.DataFrame:
     """
     Chuyển traffic JSON → pandas DataFrame cho Pydeck layers.
 
-    Cấu trúc API thực tế:
-      street.path     = null (luôn luôn)
-      street.segments = [{ path: [[lon,lat],...], congestion_level, color }, ...]
+    Cấu trúc API Sprint 2:
+      street.segments = [{ path, avg_speed, congestion_level, color }, ...]  ← luôn có nếu có geometry
+      street.path     = null  (backend không dùng nữa)
+      street.lat/lon  = centroid fallback khi không có geometry
 
     Mỗi SEGMENT = 1 row trong DataFrame → PathLayer vẽ từng đoạn màu riêng.
-    Nếu không có segments → 1 row fallback dùng lat/lon → ScatterLayer.
-
-    v1.1: Fix đọc segments thay vì street.path.
+    Không có segments (không có geometry) → fallback dot tại centroid lat/lon.
     """
     rows = []
 
@@ -67,18 +66,50 @@ def build_map_dataframe(traffic_data: dict) -> pd.DataFrame:
                     "lon"             : None,
                 })
         else:
-            # ── Không có segments → ưu tiên street.path, fallback dot ──
-            # Trường hợp: đường ngắn (Ngô Thì Nhậm...) TomTom không chia đoạn
-            # street.path có tọa độ đường → dùng PathLayer
-            # street.path = null → hiện dot tại tọa độ trung tâm
-            level       = street.get("congestion_level")
-            street_path = street.get("path")   # Có thể là list hoặc None
+            # ── Không có segments = đường không có geometry trong DB ──
+            # Sprint 2: backend chỉ trả segments[] rỗng khi street không có geometry PostGIS
+            # Fallback: hiển thị dot tại centroid (lat/lon) do backend tính từ ST_Centroid
+            level = street.get("congestion_level")
             rows.append({
                 **base,
                 "color": get_color(level),
-                "path" : street_path,                           # PathLayer nếu có
-                "lat"  : None if street_path else (street.get("lat") or 16.0544),
-                "lon"  : None if street_path else (street.get("lon") or 108.2022),
+                "path" : None,
+                "lat"  : street.get("lat") or 16.0544,
+                "lon"  : street.get("lon") or 108.2022,
             })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def filter_dataframe(
+    df: pd.DataFrame,
+    search: str = "",
+    congestion: int | None = None,
+) -> pd.DataFrame:
+    """
+    Lọc DataFrame theo tên đường và/hoặc mức ùn tắc — client-side.
+    Gọi sau build_map_dataframe(). Không gọi thêm API.
+
+    Args:
+        df         — DataFrame từ build_map_dataframe()
+        search     — Từ khoá tên đường (case-insensitive). "" = không lọc
+        congestion — Mức ùn tắc (0/1/2). None = hiển thị tất cả
+
+    Returns:
+        DataFrame đã lọc, cùng cấu trúc cột với input.
+    """
+    if df.empty:
+        return df
+
+    # SCRUM-22: Tìm kiếm tên đường (so khớp một phần, không phân biệt hoa thường)
+    if search:
+        mask_search = df["name"].str.contains(search, case=False, na=False)
+        df = df[mask_search]
+
+    # SCRUM-23: Lọc theo mức ùn tắc
+    if congestion is not None:
+        mask_cong = df["congestion_level"] == congestion
+        df = df[mask_cong]
+
+    return df
+

@@ -1,6 +1,6 @@
 """
 shared/components/kpi_cards.py — 3 KPI Metric Cards
-v1.0
+v1.1 — Fix None handling cho avg_speed_city
 """
 
 import streamlit as st
@@ -19,7 +19,7 @@ def render_kpi_cards(traffic_data: dict) -> None:
     total   = traffic_data.get("total_streets", 0) or 1
     red     = traffic_data.get("red_count", 0)
     green   = traffic_data.get("green_count", 0)
-    avg_spd = traffic_data.get("avg_speed_city", 0)
+    avg_spd = traffic_data.get("avg_speed_city") or 0   # or 0: xử lý cả None lẫn missing
     green_pct = round(green / total * 100, 1) if total else 0
 
     st.markdown(f"""
