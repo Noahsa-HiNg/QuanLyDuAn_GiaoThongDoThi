@@ -56,3 +56,4 @@ class TrafficSummaryOut(BaseModel):
     no_data_count: int  # Số đường chưa có dữ liệu
     data_as_of: Optional[datetime] = None   # Thời điểm dữ liệu mới nhất
     streets: list[TrafficCurrentOut]
+    avg_speed_city: Optional[float] = None

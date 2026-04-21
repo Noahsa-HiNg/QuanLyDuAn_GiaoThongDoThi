@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -44,9 +45,7 @@ class Settings(BaseSettings):
             return [self.tomtom_api_key]
         return []
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = ConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
 
 
 settings = Settings()

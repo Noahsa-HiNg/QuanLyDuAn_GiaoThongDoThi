@@ -115,23 +115,41 @@ def _build_traffic_out(
 
     # ─ Xây dựng per-segment path + color (cho PathLayer)
     segments_out = []
-    seg_map = {td.segment_idx: td for td in segments_data}  # {idx: TrafficData}
-    n_zones = max(seg_map.keys()) + 1 if seg_map else 1
+    seg_map = {td.segment_idx: td for td in segments_data}
 
-    if full_path and len(full_path) >= 2 and len(seg_map) > 1:
-        # Chia geometry thành đúng số zone bằng ngưỡng được lưu
-        zones = split_path_into_zones(full_path, n_zones=n_zones)
-        for zone in zones:
-            idx = zone["segment_idx"]
-            td  = seg_map.get(idx)
+    # 🔥 LUÔN đảm bảo có ít nhất 1 segment
+    if full_path and len(full_path) >= 2:
+
+        if len(seg_map) <= 1:
+            # 👉 fallback cho đường ngắn / chỉ có 1 segment
+            td = segments_data[0] if segments_data else None
             cong = td.congestion_level if td else None
+
             segments_out.append({
-                "segment_idx"     : idx,
-                "path"            : zone["coords"],   # [[lon,lat],...]
-                "avg_speed"       : td.avg_speed if td else None,
+                "segment_idx": 0,
+                "path": full_path,
+                "avg_speed": td.avg_speed if td else None,
                 "congestion_level": cong,
-                "color"           : CONGESTION_COLORS.get(cong, CONGESTION_COLORS[None]),
+                "color": CONGESTION_COLORS.get(cong, CONGESTION_COLORS[None]),
             })
+
+        else:
+            # 👉 đường dài (chia nhiều segment)
+            n_zones = max(seg_map.keys()) + 1
+            zones = split_path_into_zones(full_path, n_zones=n_zones)
+
+            for zone in zones:
+                idx = zone["segment_idx"]
+                td  = seg_map.get(idx)
+                cong = td.congestion_level if td else None
+
+                segments_out.append({
+                    "segment_idx": idx,
+                    "path": zone["coords"],
+                    "avg_speed": td.avg_speed if td else None,
+                    "congestion_level": cong,
+                    "color": CONGESTION_COLORS.get(cong, CONGESTION_COLORS[None]),
+                })
 
     lat = centroid[0] if centroid else None
     lon = centroid[1] if centroid else None
@@ -246,12 +264,16 @@ def get_traffic_current(
     timestamps = [r.timestamp for r in result_list if r.timestamp]
     data_as_of = max(timestamps) if timestamps else None
 
+    valid_speeds = [r.avg_speed for r in result_list if r.avg_speed is not None]
+    avg_speed_city = round(sum(valid_speeds) / len(valid_speeds), 1) if valid_speeds else None
+
     return TrafficSummaryOut(
         total_streets = len(result_list),
         green_count   = green,
         yellow_count  = yellow,
         red_count     = red,
         no_data_count = no_data,
+        avg_speed_city  = avg_speed_city,
         data_as_of    = data_as_of,
         streets       = result_list,
     )

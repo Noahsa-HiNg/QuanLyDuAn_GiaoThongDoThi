@@ -112,7 +112,8 @@ services:
     restart: unless-stopped
     volumes:
       - pgadmin_data:/var/lib/pgadmin  # Lưu cấu hình, không cần login lại mỗi lần
+      - ./traffic_dump.sql:/docker-entrypoint-initdb.d/traffic_dump.sql # Tự động import dữ liệu khi container khởi động
 
 volumes:
   postgres_data:
-  pgadmin_data:  # Volume cho pgAdmin
+  pgadmin_data:  # Volume cho pgAdmin
