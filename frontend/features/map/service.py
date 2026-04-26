@@ -1,6 +1,6 @@
 """
 features/map/service.py — Business Logic: Bản đồ Giao thông
-v1.3 — Sync Sprint 2: backend luôn trả segments[] cho đường có geometry
+v1.4 — FIX 1: lat/lon centroid thêm vào base (dùng cho map zoom SCRUM-22/24)
 """
 
 import pandas as pd
@@ -38,6 +38,7 @@ def build_map_dataframe(traffic_data: dict) -> pd.DataFrame:
         segments = street.get("segments") or []
 
         # Tooltip info chung cho cả đường
+        # lat/lon centroid của đường — dùng cho ScatterLayer fallback + map zoom
         base = {
             "street_id"       : street.get("street_id"),
             "name"            : street.get("street_name", ""),
@@ -47,6 +48,9 @@ def build_map_dataframe(traffic_data: dict) -> pd.DataFrame:
             "congestion_level": street.get("congestion_level"),
             "congestion_label": street.get("congestion_label") or congestion_label(street.get("congestion_level")),
             "timestamp_vn"    : street.get("timestamp_vn", "—"),
+            # FIX 1: centroid luôn có trong mọi row để tính zoom map
+            "lat"             : street.get("lat") or 16.0544,
+            "lon"             : street.get("lon") or 108.2022,
         }
 
         if segments:
@@ -62,20 +66,16 @@ def build_map_dataframe(traffic_data: dict) -> pd.DataFrame:
                     "congestion_label": congestion_label(level) or base["congestion_label"],
                     "color"           : color,
                     "path"            : seg.get("path"),   # [[lon, lat], ...]
-                    "lat"             : None,
-                    "lon"             : None,
+                    # lat/lon kế thừa từ base (centroid của đường)
                 })
         else:
             # ── Không có segments = đường không có geometry trong DB ──
-            # Sprint 2: backend chỉ trả segments[] rỗng khi street không có geometry PostGIS
-            # Fallback: hiển thị dot tại centroid (lat/lon) do backend tính từ ST_Centroid
+            # Fallback: hiển thị dot tại centroid (lat/lon từ base)
             level = street.get("congestion_level")
             rows.append({
                 **base,
                 "color": get_color(level),
                 "path" : None,
-                "lat"  : street.get("lat") or 16.0544,
-                "lon"  : street.get("lon") or 108.2022,
             })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()

@@ -179,3 +179,11 @@ certs/
 .cache/
 tmp/
 temp/
+
+# ═══════════════════════════════════════
+# AI AGENT (Cursor / VSCode AI tools)
+# ═══════════════════════════════════════
+# File tự sinh bởi AI agent — chứa đường dẫn local, không commit
+.agent/
+.cursor/
+.gemini/

@@ -89,13 +89,15 @@ def render_sidebar() -> tuple[int | None, str, int | None]:
 
         # ── Header ──────────────────────────────────────────
         st.markdown("""
-        <div style="text-align:center; padding: 8px 0 20px">
-            <div style="font-size:2.4rem">🚦</div>
-            <div style="font-size:1.1rem; font-weight:700; color:#f1f5f9; margin:4px 0">
-                Giao thông Đà Nẵng
-            </div>
-            <div style="font-size:0.75rem; color:#64748b">
-                <span class="status-dot"></span>Dữ liệu thời gian thực
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0 16px">
+            <div style="font-size:1.7rem;line-height:1">🚦</div>
+            <div>
+                <div style="font-size:1rem;font-weight:700;color:#f1f5f9;line-height:1.3">
+                    Giao thông Đà Nẵng
+                </div>
+                <div style="font-size:0.74rem;color:#64748b;margin-top:2px">
+                    Dữ liệu thời gian thực
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -170,7 +172,8 @@ def render_sidebar() -> tuple[int | None, str, int | None]:
         st.markdown("""
         <div style="font-size:0.75rem; color:#475569; line-height:1.8">
             📡 Nguồn: TomTom + Goong API<br>
-            🔄 Cập nhật: mỗi 60 giây<br>
+            🔄 Thu thập data: mỗi 30 phút<br>
+            🖥️ Trang kiểm tra: mỗi 60 giây<br>
             🗃️ DB: PostgreSQL + PostGIS
         </div>
         """, unsafe_allow_html=True)
