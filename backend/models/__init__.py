@@ -35,6 +35,9 @@ from .feedback import Feedback          # feedback     → FK: streets.id
 from .audit_log import AuditLog         # audit_log     → FK: users.id
 from .system_config import SystemConfig # system_config → FK: users.id
 
+# ── Bảng độc lập (không FK) ────────────────────────────────────────
+from .weather_snapshot import WeatherSnapshot  # weather_snapshots → không FK
+
 # Export rõ ràng — giúp IDE gợi ý autocomplete đúng
 __all__ = [
     "District",
@@ -46,4 +49,5 @@ __all__ = [
     "Feedback",
     "AuditLog",
     "SystemConfig",
+    "WeatherSnapshot",
 ]

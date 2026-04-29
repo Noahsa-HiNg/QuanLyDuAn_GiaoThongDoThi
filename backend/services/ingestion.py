@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 import requests
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -481,33 +482,143 @@ def ingest_street(street: Street, db: Session) -> bool:
     return saved > 0
 
 
-# ─── 5. MỘT VÒNG THU THẬP ─────────────────────────────────────────────────────
-def run_one_cycle(streets: list, db: Session, delay_seconds: float = 1.5) -> int:
-    """
-    Thu thập toàn bộ đường trong 1 chu kỳ.
-    delay_seconds: nghỉ giữa mỗi đường để tránh spike request.
-    Trả về số đường thu thập thành công.
-    """
-    # Nếu cả 2 API đều hết quota → bỏ qua chu kỳ này hoàn toàn
-    if tomtom_quota.is_exhausted and goong_quota.is_exhausted:
-        log.warning(
-            "⛔ Cả TomTom và Goong đều hết quota hôm nay. "
-            "Bỏ qua chu kỳ, đợi đến 00:00 +07:00 reset tự động."
-        )
-        return 0
+# ─── 5. HÀM CÀO CHUNG — SOURCE OF TRUTH CHO TOÀN BỘ PIPELINE ────────────────
+def _make_error_result(started_at: datetime, msg: str) -> dict:
+    """Tạo dict lỗi chuẩn để trả về sớm khi không thể cào."""
+    return {
+        "streets_total"   : 0,
+        "streets_success" : 0,
+        "records_saved"   : 0,
+        "quota_remaining" : 0,
+        "duration_seconds": 0.0,
+        "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
+        "errors"          : [msg],
+    }
 
-    success = 0
+
+def run_crawl_cycle(
+    db: Session,
+    retention_days: int = 0,
+    with_weather: bool = False,
+) -> dict:
+    """
+    Hàm CÀO DUY NHẤT — source of truth cho toàn bộ pipeline thu thập data.
+
+    Được gọi từ 2 nơi với cấu hình khác nhau:
+      - Scheduler (traffic_scheduler.py):
+            run_crawl_cycle(db, retention_days=30, with_weather=True)
+      - On-demand API (traffic_crawl.py):
+            run_crawl_cycle(db, retention_days=0, with_weather=False)
+
+    Args:
+        db            : SQLAlchemy session (caller tự tạo và đóng)
+        retention_days: Số ngày giữ lại dữ liệu cũ.
+                        0  = không xóa gì (on-demand, bảo toàn lịch sử ML)
+                        30 = xóa data cũ hơn 30 ngày (scheduler định kỳ)
+        with_weather  : True  = fetch + lưu WeatherSnapshot (scheduler)
+                        False = bỏ qua, tiết kiệm API call (on-demand)
+
+    Returns:
+        dict tóm tắt: streets_total, streets_success, records_saved,
+                      quota_remaining, duration_seconds, timestamp, errors
+    """
+    import time as _time
+    from services import cache as cache_svc
+
+    started_at = datetime.now(TZ_DANANG)
+    t0         = _time.time()
+    errors: list[str] = []
+
+    # ── Kiểm tra key và quota ─────────────────────────────────────────────
+    if not tomtom_quota._keys:
+        return _make_error_result(started_at, "Không có TOMTOM_API_KEY trong .env")
+
+    if tomtom_quota.is_exhausted and goong_quota.is_exhausted:
+        log.warning("⛔ Cả TomTom và Goong đều hết quota — bỏ qua chu kỳ")
+        return _make_error_result(started_at, "Cả TomTom và Goong đều hết quota hôm nay")
+
+    # ── Xóa dữ liệu cũ (chỉ scheduler dùng, on-demand KHÔNG xóa) ────────
+    if retention_days > 0:
+        cutoff = datetime.now(TZ_DANANG) - timedelta(days=retention_days)
+        deleted = db.execute(
+            text("DELETE FROM traffic_data WHERE timestamp < :cutoff"),
+            {"cutoff": cutoff},
+        ).rowcount
+        db.commit()
+        if deleted:
+            log.info(f"🗑  Xóa {deleted:,} bản ghi cũ hơn {retention_days} ngày")
+
+    # ── Fetch + lưu weather (chỉ scheduler cần) ──────────────────────────
+    if with_weather:
+        try:
+            from ml.feature_engineering import fetch_weather_danang
+            from models import WeatherSnapshot
+            weather = fetch_weather_danang()
+            db.add(WeatherSnapshot(
+                timestamp     = started_at,
+                source        = "openweathermap",
+                temperature   = weather.get("temperature"),
+                humidity      = weather.get("humidity"),
+                wind_speed    = weather.get("wind_speed"),
+                rain_1h_mm    = weather.get("rain_1h_mm", 0.0),
+                is_raining    = weather.get("is_raining", 0),
+                visibility_km = weather.get("visibility_km"),
+                weather_group = weather.get("weather_group", 0),
+                weather_id    = weather.get("weather_id"),
+            ))
+            log.info(
+                f"🌤  Thời tiết: {weather.get('temperature', 0):.0f}°C | "
+                f"Mưa: {weather.get('rain_1h_mm', 0):.1f}mm | "
+                f"Tầm nhìn: {weather.get('visibility_km', 0):.1f}km"
+            )
+        except Exception as e:
+            log.warning(f"⚠ Không lấy được thời tiết: {e} — tiếp tục cào traffic")
+
+    # ── Lấy danh sách đường ───────────────────────────────────────────────
+    streets = db.query(Street).all()
+    if not streets:
+        return _make_error_result(
+            started_at, "Không có đường nào trong DB — chạy sync_streets.py trước"
+        )
+
+    log.info(
+        f"🌐 Bắt đầu cào {len(streets)} đường lúc "
+        f"{started_at.strftime('%H:%M:%S %d/%m/%Y +07')} | "
+        f"Quota TomTom: {tomtom_quota.remaining} req"
+    )
+
+    success_cnt = 0
     for street in streets:
         ok = ingest_street(street, db)
         if ok:
-            success += 1
-        time.sleep(delay_seconds)
+            success_cnt += 1
+        else:
+            errors.append(street.name)
+        time.sleep(1.0)   # Delay nhẹ giữa 2 đường
 
+    # ── Commit + invalidate cache ─────────────────────────────────────────
     try:
         db.commit()
-        log.info(f"✅ Đã lưu {success}/{len(streets)} đường vào DB")
     except Exception as e:
         db.rollback()
         log.error(f"❌ Lỗi commit DB: {e}")
+        raise
 
-    return success
+    cache_svc.invalidate_traffic()
+    log.info("🗑  Cache Redis đã xóa — lần gọi tiếp theo đọc từ DB")
+
+    duration = round(_time.time() - t0, 2)
+    log.info(
+        f"✅ Hoàn tất — {success_cnt}/{len(streets)} đường | "
+        f"{duration}s | Quota còn: {tomtom_quota.remaining}"
+    )
+
+    return {
+        "streets_total"   : len(streets),
+        "streets_success" : success_cnt,
+        "records_saved"   : success_cnt,
+        "quota_remaining" : tomtom_quota.remaining,
+        "duration_seconds": duration,
+        "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
+        "errors"          : errors,
+    }

@@ -1,220 +1,264 @@
 """
-services/traffic_crawl.py — Cào dữ liệu traffic 1 lần duy nhất
+services/traffic_crawl.py — Cào dữ liệu traffic theo 3 chế độ
 
-Dùng chung cho:
-  - API endpoint  : POST /api/traffic/crawl
-  - Scheduler     : traffic_scheduler.py (gọi hàm này mỗi 30 phút)
+─────────────────────────────────────────────────────────────
+  CHẾ ĐỘ 1: crawl_all_once(db)
+    Cào toàn bộ tất cả đường → 1 lần duy nhất → trả về kết quả.
+    Được gọi từ: POST /api/traffic/crawl
 
-Hàm crawl_all_streets(db) trả về dict tóm tắt kết quả.
+  CHẾ ĐỘ 2: crawl_all_loop(db_factory, interval_seconds, stop_event)
+    Cào toàn bộ đường → lặp lại định kỳ → cho đến khi stop_event.set().
+    Được gọi từ: POST /api/traffic/crawl/loop/start
+    Dừng lại từ : POST /api/traffic/crawl/loop/stop
+
+  CHẾ ĐỘ 3: crawl_one_street(db, street_id)
+    Cào đúng 1 đường duy nhất → 1 lần → trả về kết quả.
+    Được gọi từ: POST /api/traffic/crawl/{street_id}
+─────────────────────────────────────────────────────────────
+
+Lưu ý:
+  - Không xóa lịch sử (retention_days=0) để bảo toàn dataset ML.
+  - Không fetch weather (with_weather=False) để tiết kiệm API call.
+  - Toàn bộ logic thực tế nằm ở: services/ingestion.
 """
 
-import json
-import time
 import logging
-import requests as _req
+import threading
+import time as _time
+from datetime import datetime, timezone, timedelta
+from typing import Callable, Optional
 
-from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
-from config import settings
 from services.ingestion import (
-    fetch_tomtom, fetch_goong, calc_congestion_level,
-    tomtom_quota, goong_quota,
+    TZ_DANANG,
+    tomtom_quota,
+    goong_quota,
+    ingest_street,
+    _make_error_result,
 )
-from services import cache as cache_svc   # ← Fix #1: invalidate cache sau crawl
-from utils.geometry import split_path_into_zones, calc_road_length_m
+from services import cache as cache_svc
+from models import Street
 
-# ─── TIMEZONE VIỆT NAM ────────────────────────────────────────────────────────
-TZ_VN = timezone(timedelta(hours=7))
+log = logging.getLogger("traffic_crawl")
 
+# ─── CHẾ ĐỘ 1: CÀO TOÀN BỘ 1 LẦN ───────────────────────────────────────────
 
-def _now_vn() -> datetime:
-    return datetime.now(TZ_VN)
-
-
-# ─── Fix #2: _call_tomtom() ĐÃ XÓA ──────────────────────────────────────────
-# Dùng fetch_tomtom() từ services/ingestion.py — source of truth duy nhất.
-# fetch_tomtom() đã xử lý đầy đủ: 403, 429, key rotation, retry all keys.
-
-
-# ─── HÀM CHÍNH: Cào tất cả đường đúng 1 lần ─────────────────────────────────
-def crawl_all_streets(db: Session) -> dict:
+def crawl_all_once(db: Session) -> dict:
     """
-    Cào dữ liệu traffic của TẤT CẢ đường — đúng 1 lần.
+    Cào toàn bộ tất cả đường đúng 1 lần.
 
-    Quy trình:
-        1. Xóa bản ghi cũ hơn 2 giờ
-        2. Với mỗi đường → split_path_into_zones → gọi TomTom tại midpoint
-        3. Fallback Goong nếu TomTom thất bại
-        4. Lưu TrafficData với timestamp giờ VN
-
-    Trả về:
-        {
-          "streets_total"   : int,   # Tổng số đường trong DB
-          "streets_success" : int,   # Số đường cào thành công
-          "records_saved"   : int,   # Tổng bản ghi đã lưu
-          "quota_remaining" : int,   # Quota TomTom còn lại
-          "duration_seconds": float, # Thời gian chạy
-          "timestamp"       : str,   # Giờ bắt đầu (VN)
-          "errors"          : list,  # Danh sách đường bị lỗi
-        }
+    Không xóa dữ liệu lịch sử (bảo toàn dataset ML).
+    Trả về dict tóm tắt: streets_total, streets_success, records_saved, ...
     """
-    from models import Street, TrafficData
+    log.info("🔔 [CHẾ ĐỘ 1] Cào toàn bộ đường — 1 lần")
+    return _run_single_cycle(db, label="[1-lần]")
 
-    log = logging.getLogger("traffic_crawl")
-    started_at = _now_vn()
-    t0 = time.time()
-    errors: list[str] = []
 
-    # ── Kiểm tra key TomTom ──────────────────────────────────────────────────
-    keys = settings.tomtom_keys_list
-    if not keys:
-        return {
-            "streets_total"   : 0,
-            "streets_success" : 0,
-            "records_saved"   : 0,
-            "quota_remaining" : 0,
-            "duration_seconds": 0.0,
-            "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
-            "errors"          : ["Không có TOMTOM_API_KEY trong .env"],
-        }
+# ─── CHẾ ĐỘ 2: CÀO TOÀN BỘ LẶP LẠI ─────────────────────────────────────────
+
+def crawl_all_loop(
+    db_factory: Callable[[], Session],
+    interval_seconds: int = 600,
+    stop_event: Optional[threading.Event] = None,
+    on_cycle_done: Optional[Callable[[dict], None]] = None,
+) -> None:
+    """
+    Cào toàn bộ đường — lặp đi lặp lại mỗi `interval_seconds` giây.
+
+    Chạy trên một thread riêng, thoát khi stop_event.set() được gọi.
+
+    Args:
+        db_factory       : Hàm trả về SQLAlchemy Session mới (để tạo session mỗi chu kỳ).
+        interval_seconds : Khoảng cách giữa 2 chu kỳ (mặc định 10 phút).
+        stop_event       : threading.Event — set() để dừng vòng lặp.
+        on_cycle_done    : Callback tùy chọn — nhận dict kết quả mỗi chu kỳ.
+    """
+    if stop_event is None:
+        stop_event = threading.Event()
+
+    cycle = 0
+    log.info(
+        f"🔁 [CHẾ ĐỘ 2] Bắt đầu cào vòng lặp — interval={interval_seconds}s"
+    )
+
+    while not stop_event.is_set():
+        cycle += 1
+        log.info(f"🔁 [Vòng {cycle}] Bắt đầu chu kỳ cào...")
+        db = db_factory()
+        try:
+            result = _run_single_cycle(db, label=f"[loop #{cycle}]")
+            if on_cycle_done:
+                on_cycle_done(result)
+        finally:
+            db.close()
+
+        # Chờ interval, nhưng kiểm tra stop_event mỗi giây
+        log.info(f"⏳ [Vòng {cycle}] Chờ {interval_seconds}s trước chu kỳ tiếp theo...")
+        for _ in range(interval_seconds):
+            if stop_event.is_set():
+                break
+            _time.sleep(1)
+
+    log.info("🛑 [CHẾ ĐỘ 2] Vòng lặp cào đã dừng.")
+
+
+# ─── CHẾ ĐỘ 3: CÀO 1 ĐƯỜNG 1 LẦN ────────────────────────────────────────────
+
+def crawl_one_street(db: Session, street_id: int) -> dict:
+    """
+    Cào đúng 1 đường duy nhất, 1 lần.
+
+    Args:
+        db        : SQLAlchemy Session.
+        street_id : ID của đường cần cào.
+
+    Returns:
+        dict tóm tắt gồm: street_id, street_name, success, records_saved,
+                          quota_remaining, duration_seconds, timestamp, error.
+    """
+    started_at = datetime.now(TZ_DANANG)
+    t0 = _time.time()
+
+    log.info(f"🔔 [CHẾ ĐỘ 3] Cào 1 đường — street_id={street_id}")
+
+    # Kiểm tra quota
+    if not tomtom_quota._keys:
+        msg = "Không có TOMTOM_API_KEY trong .env"
+        log.error(f"❌ {msg}")
+        return _single_error(started_at, street_id, None, msg)
 
     if tomtom_quota.is_exhausted and goong_quota.is_exhausted:
-        return {
-            "streets_total"   : 0,
-            "streets_success" : 0,
-            "records_saved"   : 0,
-            "quota_remaining" : 0,
-            "duration_seconds": 0.0,
-            "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
-            "errors"          : ["Cả TomTom và Goong đều hết quota hôm nay"],
-        }
+        msg = "Cả TomTom và Goong đều hết quota hôm nay"
+        log.warning(f"⛔ {msg}")
+        return _single_error(started_at, street_id, None, msg)
 
-    log.info(f"🚀 Bắt đầu crawl lúc {started_at.strftime('%H:%M:%S %d/%m/%Y +07')}")
-    log.info(f"   TomTom: {len(keys)} key(s) | Quota: {tomtom_quota.summary}")
+    # Lấy thông tin đường
+    street = db.query(Street).filter(Street.id == street_id).first()
+    if not street:
+        msg = f"Không tìm thấy đường với id={street_id}"
+        log.warning(f"❌ {msg}")
+        return _single_error(started_at, street_id, None, msg)
 
-    # ── Xóa traffic cũ hơn 2 giờ ────────────────────────────────────────────
-    cutoff = _now_vn() - timedelta(hours=2)
-    deleted = db.execute(
-        text("DELETE FROM traffic_data WHERE timestamp < :cutoff"),
-        {"cutoff": cutoff}
-    ).rowcount
-    db.commit()
-    if deleted:
-        log.info(f"🗑  Đã xóa {deleted:,} bản ghi cũ hơn 2 giờ")
+    # Cào
+    ok = ingest_street(street, db)
 
-    # ── Lấy danh sách đường có geometry ─────────────────────────────────────
+    # Commit + invalidate cache
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        log.error(f"❌ Lỗi commit DB: {e}")
+        raise
+
+    cache_svc.invalidate_traffic()
+
+    duration = round(_time.time() - t0, 2)
+    log.info(
+        f"{'✅' if ok else '❌'} [Đường: {street.name}] "
+        f"{'Thành công' if ok else 'Thất bại'} — {duration}s"
+    )
+
+    return {
+        "street_id"       : street.id,
+        "street_name"     : street.name,
+        "success"         : ok,
+        "records_saved"   : 1 if ok else 0,
+        "quota_remaining" : tomtom_quota.remaining,
+        "duration_seconds": duration,
+        "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
+        "error"           : None if ok else "Không lấy được dữ liệu từ API",
+    }
+
+
+# ─── HELPERS NỘI BỘ ──────────────────────────────────────────────────────────
+
+def _run_single_cycle(db: Session, label: str = "") -> dict:
+    """
+    Chạy 1 chu kỳ cào toàn bộ đường — dùng chung cho cả chế độ 1 và 2.
+
+    Không xóa lịch sử (retention_days=0), không fetch weather.
+    """
+    started_at = datetime.now(TZ_DANANG)
+    t0 = _time.time()
+    errors: list[str] = []
+
+    # Kiểm tra key và quota
+    if not tomtom_quota._keys:
+        return _make_error_result(started_at, "Không có TOMTOM_API_KEY trong .env")
+
+    if tomtom_quota.is_exhausted and goong_quota.is_exhausted:
+        log.warning(f"⛔ {label} Cả TomTom và Goong đều hết quota — bỏ qua chu kỳ")
+        return _make_error_result(started_at, "Cả TomTom và Goong đều hết quota hôm nay")
+
+    # Lấy danh sách đường
     streets = db.query(Street).all()
     if not streets:
-        return {
-            "streets_total"   : 0,
-            "streets_success" : 0,
-            "records_saved"   : 0,
-            "quota_remaining" : tomtom_quota.remaining,
-            "duration_seconds": round(time.time() - t0, 2),
-            "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
-            "errors"          : ["Không có đường nào trong DB — chạy sync_streets.py trước"],
-        }
+        return _make_error_result(
+            started_at, "Không có đường nào trong DB — chạy sync_streets.py trước"
+        )
 
-    ts_now       = _now_vn()
-    LABEL        = {0: "🟢", 1: "🟡", 2: "🔴"}
-    success_cnt  = 0
-    total_saved  = 0
-
-    for street in streets:
-        max_speed = street.max_speed or 50
-
-        # Lấy geometry từ PostGIS
-        row = db.execute(
-            text("""
-                SELECT (ST_AsGeoJSON(geometry)::json -> 'coordinates') AS coords
-                FROM streets WHERE id = :sid AND geometry IS NOT NULL
-            """),
-            {"sid": street.id}
-        ).fetchone()
-
-        if not row or not row.coords:
-            log.debug(f"  ⚠ {street.name} — chưa có geometry, bỏ qua")
-            errors.append(f"{street.name}: chưa có geometry")
-            continue
-
-        coords = json.loads(row.coords) if isinstance(row.coords, str) else row.coords
-        if not coords or len(coords) < 2:
-            errors.append(f"{street.name}: geometry không hợp lệ")
-            continue
-
-        zones    = split_path_into_zones(coords)
-        length_m = calc_road_length_m(coords)
-        n_zones  = len(zones)
-        saved_n  = 0
-        zone_results = []
-
-        for zone in zones:
-            seg_idx = zone["segment_idx"]
-            lat     = zone["mid_lat"]
-            lon     = zone["mid_lon"]
-
-            # TomTom (tự rotate key khi 403/429) → fallback Goong
-            # Fix #2: Dùng fetch_tomtom() từ ingestion.py (không copy lại)
-            result = fetch_tomtom(lat, lon)
-            src    = "tomtom"
-            if result is None:
-                result = fetch_goong(lat, lon, max_speed)
-                src    = "goong"
-            if result is None:
-                log.debug(f"  ✗ {street.name} zone {seg_idx}: cả 2 API thất bại")
-                continue
-
-            avg_speed  = result["avg_speed"]
-            ref_speed  = result.get("free_flow_speed") or max_speed
-            congestion = calc_congestion_level(avg_speed, ref_speed)
-
-            db.add(TrafficData(
-                street_id        = street.id,
-                segment_idx      = seg_idx,
-                timestamp        = ts_now,
-                avg_speed        = avg_speed,
-                congestion_level = congestion,
-                source           = src,
-            ))
-            saved_n += 1
-            zone_results.append(f"{LABEL.get(congestion,'⚪')}{avg_speed:.0f}")
-
-            if n_zones > 1:
-                time.sleep(0.4)
-
-        if saved_n > 0:
-            success_cnt += 1
-            total_saved += saved_n
-            zone_str = " | ".join(zone_results)
-            log.info(
-                f"  ✓ {street.name:<28} {length_m/1000:.1f}km "
-                f"[{n_zones} đoạn] → {zone_str}"
-            )
-        else:
-            errors.append(f"{street.name}: không cào được dữ liệu")
-
-        time.sleep(0.8)   # Delay nhẹ giữa 2 đường
-
-    db.commit()
-
-    # ── Fix #1: Xóa cache Redis sau crawl để lần gọi tiếp theo đọc data mới ──
-    cache_svc.invalidate_traffic()
-    log.info("🗑  Cache Redis đã được xóa — lần gọi tiếp theo sẽ đọc từ DB")
-
-    duration = round(time.time() - t0, 2)
     log.info(
-        f"✅ Hoàn tất — {success_cnt}/{len(streets)} đường | "
-        f"{total_saved} bản ghi | {duration}s | Quota còn: {tomtom_quota.remaining}"
+        f"🌐 {label} Cào {len(streets)} đường lúc "
+        f"{started_at.strftime('%H:%M:%S %d/%m/%Y +07')} | "
+        f"Quota TomTom: {tomtom_quota.remaining} req"
+    )
+
+    success_cnt = 0
+    for street in streets:
+        ok = ingest_street(street, db)
+        if ok:
+            success_cnt += 1
+        else:
+            errors.append(street.name)
+        _time.sleep(1.0)   # Delay nhẹ giữa 2 đường
+
+    # Commit + invalidate cache
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        log.error(f"❌ {label} Lỗi commit DB: {e}")
+        raise
+
+    cache_svc.invalidate_traffic()
+    log.info(f"🗑  {label} Cache Redis đã xóa — lần gọi tiếp theo đọc từ DB")
+
+    duration = round(_time.time() - t0, 2)
+    log.info(
+        f"✅ {label} Hoàn tất — {success_cnt}/{len(streets)} đường | "
+        f"{duration}s | Quota còn: {tomtom_quota.remaining}"
     )
 
     return {
         "streets_total"   : len(streets),
         "streets_success" : success_cnt,
-        "records_saved"   : total_saved,
+        "records_saved"   : success_cnt,
         "quota_remaining" : tomtom_quota.remaining,
         "duration_seconds": duration,
         "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
         "errors"          : errors,
     }
+
+
+def _single_error(
+    started_at: datetime, street_id: int, street_name: Optional[str], msg: str
+) -> dict:
+    """Dict lỗi chuẩn cho crawl_one_street."""
+    return {
+        "street_id"       : street_id,
+        "street_name"     : street_name,
+        "success"         : False,
+        "records_saved"   : 0,
+        "quota_remaining" : tomtom_quota.remaining,
+        "duration_seconds": 0.0,
+        "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
+        "error"           : msg,
+    }
+
+
+# ─── BACKWARD COMPAT (tên cũ vẫn hoạt động) ──────────────────────────────────
+# Router cũ gọi crawl_all_streets() → forward sang crawl_all_once()
+def crawl_all_streets(db: Session) -> dict:
+    """Alias backward-compatible — sử dụng crawl_all_once() thay thế."""
+    return crawl_all_once(db)
