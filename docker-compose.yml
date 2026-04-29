@@ -8,6 +8,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      PGTZ: Asia/Ho_Chi_Minh        # ← Mặc định hiển thị timestamp theo giờ Việt Nam
+      TZ: Asia/Ho_Chi_Minh          # ← Timezone của container postgres
     ports:
       - "5432:5432"
     volumes:
@@ -49,6 +51,7 @@ services:
     environment:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
+      - TZ=Asia/Ho_Chi_Minh         # ← Timezone container backend = Việt Nam
 
   frontend:
     build: ./frontend

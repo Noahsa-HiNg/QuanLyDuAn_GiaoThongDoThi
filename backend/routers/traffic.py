@@ -728,3 +728,97 @@ def remove_schedule_job(job_id: str):
             detail=f"Không tìm thấy job với id='{job_id}'",
         )
     return {"message": f"🗑 Đã xóa job '{job_id}'"}
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# THỜI TIẾT API
+# GET /api/weather/current  — Thời tiết hiện tại (gọi thẳng OpenWeather)
+# GET /api/weather/history  — Lịch sử snapshot từ DB, timestamp hiển thị UTC+7
+# ════════════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/weather/current",
+    summary="Thời tiết Đà Nẵng hiện tại",
+    description="Gọi trực tiếp OpenWeatherMap API — luôn lấy dữ liệu mới nhất, không qua cache.",
+    tags=["Weather"],
+)
+def get_weather_current():
+    """
+    Trả về thời tiết Đà Nẵng ngay lúc này (gọi thẳng API, không qua DB).
+    Timestamp hiển thị theo giờ Việt Nam (UTC+7).
+    """
+    from ml.feature_engineering import fetch_weather_danang
+    weather = fetch_weather_danang()
+    now_vn = datetime.now(TZ_DANANG)
+    return {
+        "timestamp"     : now_vn.strftime("%Y-%m-%d %H:%M:%S +07:00"),
+        "source"        : "openweathermap",
+        "temperature"   : weather.get("temperature"),
+        "humidity"      : weather.get("humidity"),
+        "wind_speed"    : weather.get("wind_speed"),
+        "rain_1h_mm"    : weather.get("rain_1h_mm", 0.0),
+        "visibility_km" : weather.get("visibility_km"),
+        "is_raining"    : bool(weather.get("is_raining", 0)),
+        "weather_id"    : weather.get("weather_id"),
+        "weather_group" : weather.get("weather_group", 0),
+        "description"   : _weather_group_label(weather.get("weather_group", 0)),
+    }
+
+
+@router.get(
+    "/weather/history",
+    summary="Lịch sử thời tiết từ DB",
+    description="Trả về N snapshot thời tiết gần nhất đã lưu trong DB. Timestamp đều theo giờ Việt Nam (+07:00).",
+    tags=["Weather"],
+)
+def get_weather_history(
+    limit: int = 24,
+    db: Session = Depends(get_db),
+):
+    """
+    Trả về tối đa `limit` bản ghi WeatherSnapshot gần nhất.
+    Timestamp được convert sang UTC+7 để khớp với traffic_data.
+    """
+    from models.weather_snapshot import WeatherSnapshot
+    rows = (
+        db.query(WeatherSnapshot)
+        .order_by(WeatherSnapshot.timestamp.desc())
+        .limit(min(limit, 200))  # tối đa 200
+        .all()
+    )
+
+    result = []
+    for r in rows:
+        # Convert timestamp sang +07 để hiển thị nhất quán với traffic_data
+        ts_vn = r.timestamp.astimezone(TZ_DANANG).strftime("%Y-%m-%d %H:%M:%S +07:00") \
+                if r.timestamp else None
+        result.append({
+            "id"            : r.id,
+            "timestamp"     : ts_vn,              # ← UTC+7, khớp với traffic
+            "source"        : r.source,
+            "temperature"   : r.temperature,
+            "humidity"      : r.humidity,
+            "wind_speed"    : r.wind_speed,
+            "rain_1h_mm"    : r.rain_1h_mm,
+            "visibility_km" : r.visibility_km,
+            "is_raining"    : bool(r.is_raining),
+            "weather_id"    : r.weather_id,
+            "weather_group" : r.weather_group,
+            "description"   : _weather_group_label(r.weather_group),
+        })
+
+    return {
+        "count"    : len(result),
+        "snapshots": result,
+    }
+
+
+def _weather_group_label(group: int) -> str:
+    """Chuyển mã nhóm thời tiết thành mô tả tiếng Việt."""
+    return {
+        0: "☀️ Trời quang",
+        1: "⛅ Có mây",
+        2: "🌧️ Mưa nhẹ",
+        3: "⚡ Mưa nặng",
+        4: "🌫️ Sương mù/khác",
+    }.get(group or 0, "Không xác định")

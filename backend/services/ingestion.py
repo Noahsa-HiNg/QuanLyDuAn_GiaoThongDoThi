@@ -408,7 +408,7 @@ def ingest_street(street: Street, db: Session) -> bool:
     from utils.geometry import split_path_into_zones
 
     max_speed = street.max_speed or 50
-    now       = datetime.now(timezone.utc)
+    now       = datetime.now(TZ_DANANG)   # Lưu giờ Đà Nẵng (+07) — hiển thị trực tiếp trong DB
     saved     = 0
 
     # ── Lấy tọa độ geometry từ DB ─────────────────────────────────────
@@ -505,7 +505,7 @@ def run_crawl_cycle(
     Hàm CÀO DUY NHẤT — source of truth cho toàn bộ pipeline thu thập data.
 
     Được gọi từ 2 nơi với cấu hình khác nhau:
-      - Scheduler (traffic_scheduler.py):
+      - Scheduler (scheduler.py):
             run_crawl_cycle(db, retention_days=30, with_weather=True)
       - On-demand API (traffic_crawl.py):
             run_crawl_cycle(db, retention_days=0, with_weather=False)
@@ -554,8 +554,10 @@ def run_crawl_cycle(
             from ml.feature_engineering import fetch_weather_danang
             from models import WeatherSnapshot
             weather = fetch_weather_danang()
+            # Lưu giờ Đà Nẵng (+07) — hiển thị trực tiếp trong DB, nhất quán với traffic_data
+            now_local = datetime.now(TZ_DANANG)
             db.add(WeatherSnapshot(
-                timestamp     = started_at,
+                timestamp     = now_local,
                 source        = "openweathermap",
                 temperature   = weather.get("temperature"),
                 humidity      = weather.get("humidity"),
@@ -566,8 +568,10 @@ def run_crawl_cycle(
                 weather_group = weather.get("weather_group", 0),
                 weather_id    = weather.get("weather_id"),
             ))
+            # Log hiển thị giờ Đà Nẵng (+07)
             log.info(
-                f"🌤  Thời tiết: {weather.get('temperature', 0):.0f}°C | "
+                f"🌤  Thời tiết lúc {now_local.strftime('%H:%M:%S %d/%m/%Y +07')}: "
+                f"{weather.get('temperature', 0):.0f}°C | "
                 f"Mưa: {weather.get('rain_1h_mm', 0):.1f}mm | "
                 f"Tầm nhìn: {weather.get('visibility_km', 0):.1f}km"
             )
