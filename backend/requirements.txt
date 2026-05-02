@@ -22,9 +22,11 @@ requests>=2.31.0              # Gọi Overpass API (seed data)
 # ── Scheduler (cron jobs, ingest API định kỳ) ──
 apscheduler>=3.10.0
 
-# ── Auth ───────────────────────────────────────
+# ── Auth ───────────────────────────────────────────────────────
 python-jose[cryptography]>=3.3.0   # JWT
-passlib[bcrypt]>=1.7.4             # Hash password
+passlib[bcrypt]>=1.7.4             # Hash password (legacy, kept for compat)
+bcrypt>=4.0.0                      # Dùng trực tiếp để tránh passlib version conflict
+pydantic[email]>=2.0.0             # EmailStr validation (cần email-validator)
 
 # ── Data / AI ──────────────────────────────────
 pandas>=2.2.0

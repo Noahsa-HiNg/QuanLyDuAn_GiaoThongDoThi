@@ -23,7 +23,7 @@ from fastapi.responses import RedirectResponse
 from routers import healthy
 from routers import streets
 from routers import traffic
-
+from routers import auth
 log = logging.getLogger("main")
 
 
@@ -65,7 +65,7 @@ app = FastAPI(
 app.include_router(healthy.router,  prefix="/api", tags=["Health"])
 app.include_router(streets.router,  prefix="/api", tags=["Streets"])
 app.include_router(traffic.router,  prefix="/api", tags=["Traffic"])
-
+app.include_router(auth.router, prefix="/api", tags=["Auth"]) 
 # TODO: Thêm router theo từng sprint
 # app.include_router(predict.router,   prefix="/api", tags=["Predict"])
 # app.include_router(route.router,     prefix="/api", tags=["Route"])
