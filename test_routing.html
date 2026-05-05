@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>🗺️ Test A* Routing — Đà Nẵng</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+
+    #header {
+      padding: 12px 20px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      display: flex; align-items: center; gap: 20px;
+    }
+    #header h1 { font-size: 16px; font-weight: 700; color: #38bdf8; }
+
+    #controls {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    }
+    .badge {
+      padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    }
+    .badge-blue  { background: #1d4ed8; color: #bfdbfe; }
+    .badge-green { background: #15803d; color: #bbf7d0; }
+
+    select, button {
+      padding: 6px 14px; border-radius: 8px; border: 1px solid #334155;
+      font-size: 13px; cursor: pointer;
+    }
+    select  { background: #1e293b; color: #e2e8f0; }
+    button  { background: #0ea5e9; color: white; font-weight: 600; border: none; }
+    button:hover { background: #0284c7; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+
+    #map { flex: 1; }
+
+    #panel {
+      position: absolute; bottom: 20px; right: 20px; z-index: 1000;
+      background: #1e293b; border: 1px solid #334155; border-radius: 12px;
+      padding: 16px; min-width: 260px; max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    #panel h2 { font-size: 14px; color: #94a3b8; margin-bottom: 12px; }
+    .stat { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+    .stat-val { font-weight: 700; color: #38bdf8; }
+    #streets-list { margin-top: 10px; font-size: 12px; }
+    .street-item {
+      padding: 4px 8px; margin: 3px 0; border-radius: 6px;
+      background: #0f172a; border-left: 3px solid #38bdf8;
+    }
+    #status {
+      font-size: 12px; padding: 6px 10px; border-radius: 6px;
+      background: #0f172a; margin-top: 10px; color: #94a3b8;
+    }
+    .status-error  { color: #f87171 !important; }
+    .status-ok     { color: #4ade80 !important; }
+    .status-loading{ color: #fbbf24 !important; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🗺️ A* Routing Test — Đà Nẵng</h1>
+  <div id="controls">
+    <span class="badge badge-blue">Bước 1: Click điểm xuất phát 📍</span>
+    <select id="mode-select">
+      <option value="shortest">📏 Ngắn nhất (km)</option>
+      <option value="fastest">⚡ Nhanh nhất (tốc độ thực)</option>
+    </select>
+    <button onclick="clearRoute()" class="danger">🗑 Xóa</button>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="panel">
+  <h2>📊 Kết quả tìm đường</h2>
+  <div class="stat"><span>Khoảng cách</span><span class="stat-val" id="r-dist">—</span></div>
+  <div class="stat"><span>Thời gian TT</span><span class="stat-val" id="r-time">—</span></div>
+  <div class="stat"><span>Số điểm path</span><span class="stat-val" id="r-nodes">—</span></div>
+  <div class="stat"><span>Số đường qua</span><span class="stat-val" id="r-streets-count">—</span></div>
+  <div id="streets-list"></div>
+  <div id="status">💡 Click vào bản đồ để chọn điểm xuất phát</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const API = 'http://localhost:8000/api';
+
+  // Khởi tạo bản đồ tập trung vào Đà Nẵng
+  const map = L.map('map').setView([16.068, 108.22], 14);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+  }).addTo(map);
+
+  // ── Icons ────────────────────────────────────────────────────────────────
+  const iconStart = L.divIcon({
+    className: '', iconAnchor: [16, 32],
+    html: '<div style="font-size:28px;filter:drop-shadow(0 2px 4px black)">🟢</div>',
+  });
+  const iconEnd = L.divIcon({
+    className: '', iconAnchor: [16, 32],
+    html: '<div style="font-size:28px;filter:drop-shadow(0 2px 4px black)">🔴</div>',
+  });
+
+  // ── State ────────────────────────────────────────────────────────────────
+  let startMarker = null, endMarker = null;
+  let routeLine   = null, startPt = null, endPt = null;
+  let step = 'start'; // 'start' | 'end'
+  const badgeEl = document.querySelector('.badge');
+
+  // ── Click handler ────────────────────────────────────────────────────────
+  map.on('click', async (e) => {
+    const { lat, lng } = e.latlng;
+
+    if (step === 'start') {
+      if (startMarker) map.removeLayer(startMarker);
+      startMarker = L.marker([lat, lng], { icon: iconStart })
+        .addTo(map).bindPopup('🟢 Xuất phát').openPopup();
+      startPt = { lat, lng };
+      step = 'end';
+      badgeEl.textContent = 'Bước 2: Click điểm đích 🎯';
+      badgeEl.className = 'badge badge-green';
+      setStatus('Đã chọn xuất phát — Click điểm đích', '');
+    } else {
+      if (endMarker) map.removeLayer(endMarker);
+      endMarker = L.marker([lat, lng], { icon: iconEnd })
+        .addTo(map).bindPopup('🔴 Đích').openPopup();
+      endPt = { lat, lng };
+      await findRoute();
+    }
+  });
+
+  // ── Find route ───────────────────────────────────────────────────────────
+  async function findRoute() {
+    const mode = document.getElementById('mode-select').value;
+    setStatus('⏳ Đang tìm đường...', 'loading');
+
+    const url = `${API}/routes?from_lat=${startPt.lat}&from_lng=${startPt.lng}`
+              + `&to_lat=${endPt.lat}&to_lng=${endPt.lng}&mode=${mode}`;
+    try {
+      const res  = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setStatus(`❌ Lỗi: ${data.detail}`, 'error');
+        return;
+      }
+
+      // Vẽ lộ trình
+      if (routeLine) map.removeLayer(routeLine);
+      const latlngs = data.path.map(([lng, lat]) => [lat, lng]);
+      routeLine = L.polyline(latlngs, {
+        color: '#0ea5e9', weight: 5, opacity: 0.85,
+        dashArray: null,
+      }).addTo(map);
+      map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+
+      // Hiển thị kết quả
+      document.getElementById('r-dist').textContent  = `${data.distance_km} km`;
+      document.getElementById('r-time').textContent  = `${data.duration_min} phút`;
+      document.getElementById('r-nodes').textContent = data.node_count;
+
+      const realStreets = (data.streets || []).filter(s => s !== '[intersection]');
+      document.getElementById('r-streets-count').textContent = realStreets.length;
+      document.getElementById('streets-list').innerHTML =
+        realStreets.map(s => `<div class="street-item">🛣 ${s}</div>`).join('');
+
+      setStatus(`✅ Tìm đường thành công — mode: ${mode}`, 'ok');
+
+      // Reset để chọn lại
+      step = 'start';
+      badgeEl.textContent = 'Bước 1: Click điểm xuất phát 📍';
+      badgeEl.className = 'badge badge-blue';
+
+    } catch (err) {
+      setStatus(`❌ Không kết nối được server: ${err.message}`, 'error');
+    }
+  }
+
+  // ── Clear ────────────────────────────────────────────────────────────────
+  function clearRoute() {
+    [startMarker, endMarker, routeLine].forEach(l => l && map.removeLayer(l));
+    startMarker = endMarker = routeLine = startPt = endPt = null;
+    step = 'start';
+    badgeEl.textContent = 'Bước 1: Click điểm xuất phát 📍';
+    badgeEl.className = 'badge badge-blue';
+    ['r-dist','r-time','r-nodes','r-streets-count'].forEach(id =>
+      document.getElementById(id).textContent = '—');
+    document.getElementById('streets-list').innerHTML = '';
+    setStatus('💡 Click vào bản đồ để chọn điểm xuất phát', '');
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.className = `status-${type}`;
+  }
+</script>
+</body>
+</html>

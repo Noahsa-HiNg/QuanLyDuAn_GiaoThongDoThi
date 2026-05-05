@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 from routers import healthy
 from routers import streets
@@ -26,6 +27,7 @@ from routers import traffic
 from routers import auth
 from routers import users
 from routers import predict
+from routers import route
 log = logging.getLogger("main")
 
 
@@ -60,6 +62,16 @@ app = FastAPI(
     lifespan    = lifespan,     # ← APScheduler lifecycle
 )
 
+# ─────────────────────────────────────────────────────────────
+# 3. CORS — Cho phép frontend và test tool gọi API
+# ─────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # Dev: cho phép mọi origin (file://, localhost, v.v.)
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ─────────────────────────────────────────────────────────────
 # 3. MOUNT ROUTERS
@@ -70,6 +82,7 @@ app.include_router(traffic.router,  prefix="/api", tags=["Traffic"])
 app.include_router(auth.router,     prefix="/api", tags=["Auth"])
 app.include_router(users.router,    prefix="/api", tags=["Users"])
 app.include_router(predict.router,  prefix="/api", tags=["Predict"])
+app.include_router(route.router,    prefix="/api", tags=["Route"])
 # TODO: Thêm router theo từng sprint
 # app.include_router(predict.router,   prefix="/api", tags=["Predict"])
 # app.include_router(route.router,     prefix="/api", tags=["Route"])

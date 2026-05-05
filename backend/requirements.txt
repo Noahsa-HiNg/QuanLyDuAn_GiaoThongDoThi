@@ -37,3 +37,6 @@ joblib>=1.3.0              # Load/save model .pkl
 # ── Tiện ích ───────────────────────────────────
 Faker==22.5.1              # Sinh mock data (dev only)
 packaging>=24.0
+networkx>=3.2
+scipy>=1.12
+
