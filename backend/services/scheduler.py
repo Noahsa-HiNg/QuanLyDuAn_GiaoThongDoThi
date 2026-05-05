@@ -152,6 +152,45 @@ def _register_default_jobs():
 
     log.info("📅 [APScheduler] Đã đăng ký 4 job cào mặc định")
 
+    # ─── JOB RETRAIN (Task #29) ──────────────────────────────────────────────
+
+    def _job_retrain():
+        """Auto retrain model mỗi ngày lúc 2h sáng."""
+        from ml.train import retrain_and_reload
+        from database import SessionLocal
+
+        log.info("⏰ [APScheduler] Auto-retrain job bắt đầu...")
+        db = SessionLocal()
+        try:
+            result = retrain_and_reload(db_session=db)
+            if result.get("status") == "success":
+                m = result.get("metrics", {})
+                log.info(
+                    f"✅ [APScheduler] Retrain thành công — "
+                    f"F1={m.get('f1_weighted', 0):.3f}, "
+                    f"Accuracy={m.get('accuracy', 0):.3f}"
+                )
+            else:
+                log.error(f"❌ [APScheduler] Retrain thất bại: {result.get('error')}")
+        except Exception as e:
+            log.error(f"❌ [APScheduler] Retrain lỗi: {e}", exc_info=True)
+        finally:
+            db.close()
+
+    _scheduler.add_job(
+        func    = _job_retrain,
+        trigger = CronTrigger(
+            hour   = 2,
+            minute = 0,
+            second = 0,
+            timezone="Asia/Ho_Chi_Minh",
+        ),
+        id      = "auto_retrain",
+        name    = "🤖 Auto Retrain Model (02:00 mỗi ngày)",
+        replace_existing=True,
+    )
+    log.info("📅 [APScheduler] Đã đăng ký job auto-retrain lúc 2h sáng")
+
 
 # ─── PUBLIC API ───────────────────────────────────────────────────────────────
 
