@@ -18,9 +18,19 @@ from config import APP_TITLE, APP_ICON, REFRESH_INTERVAL_MS, APP_VERSION, MAP_CE
 from shared.utils.css_loader import setup_ui
 from shared.components.sidebar import render_sidebar
 from shared.components.kpi_cards import render_kpi_cards
+from shared.api.client import get_predictions
 from features.map.service import get_traffic_data, build_map_dataframe, filter_dataframe
 from features.map.components import render_map
 from datetime import datetime, timezone, timedelta
+
+# Màu dự báo AI — TASK #27: giữ xanh/vàng/đỏ như thực tế
+# Người dùng phân biệt "dự báo vs thực tế" qua UI context (toggle ON + banner + legend text)
+# KHÔNG dùng tím vì: tím nhạt ≈ tím đậm → không phân biệt được + không có ngữ nghĩa
+_PREDICT_COLORS = {
+    0: [34,  197,  94, 220],   # Xanh  — dự báo: thông thoáng (= màu thực tế)
+    1: [234, 179,   8, 220],   # Vàng  — dự báo: chậm         (= màu thực tế)
+    2: [239,  68,  68, 220],   # Đỏ    — dự báo: kẹt xe       (= màu thực tế)
+}
 
 
 # ── Tọa độ trung tâm từng quận — SCRUM-24 map zoom ──────────────────────────
@@ -173,7 +183,7 @@ def render_footer() -> None:
 
 
 def main() -> None:
-    # ── Sidebar (Sprint 2: trả tuple 3 giá trị) ──────────────────
+    # ── Sidebar (Sprint 3: trả 3 giá trị, toggle dự báo nằm trong main view) ──
     district_id, search_text, congestion_filter = render_sidebar()
 
     # ── Fetch data (SCRUM 14: spinner) ───────────────────────────
@@ -215,6 +225,95 @@ def main() -> None:
 
     # ── FIX 1: Tính view state zoom theo filter (SCRUM-22/24) ────
     view_lat, view_lon, view_zoom = _compute_view(district_id, df)
+
+    # ── TASK #27: Toggle chế độ dự báo — glassmorphism pill ─────────────
+    st.markdown("""
+    <style>
+    /* Container bao quần toggle */
+    div[data-testid="stToggle"] {
+        background: rgba(139,92,246,0.08);
+        border: 1px solid rgba(167,139,250,0.25);
+        border-radius: 50px;
+        padding: 8px 20px 8px 14px;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.25),
+                    inset 0 1px 0 rgba(255,255,255,0.06);
+        transition: border-color 0.3s ease, box-shadow 0.3s ease,
+                    background 0.3s ease;
+        width: fit-content;
+    }
+    div[data-testid="stToggle"]:hover {
+        border-color: rgba(167,139,250,0.5);
+        background: rgba(139,92,246,0.15);
+        box-shadow: 0 0 28px rgba(139,92,246,0.2),
+                    inset 0 1px 0 rgba(255,255,255,0.09);
+    }
+    /* Nhãn chữ */
+    div[data-testid="stToggle"] label p,
+    div[data-testid="stToggle"] label span {
+        color: #c4b5fd !important;
+        font-weight: 600 !important;
+        font-size: 0.88rem !important;
+        letter-spacing: 0.02em !important;
+    }
+    /* Track — nền nút gạt khi OFF */
+    div[data-testid="stToggle"] [role="switch"] {
+        background: rgba(109,40,217,0.35) !important;
+        border: 1px solid rgba(167,139,250,0.3) !important;
+    }
+    /* Track khi ON */
+    div[data-testid="stToggle"] [role="switch"][aria-checked="true"] {
+        background: rgba(139,92,246,0.85) !important;
+        box-shadow: 0 0 10px rgba(139,92,246,0.5) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    _col_toggle, _ = st.columns([2, 5])
+    with _col_toggle:
+        show_prediction: bool = st.toggle(
+            "🔮 Xem dự báo 30 phút tới",
+            key="home_show_prediction",
+            help="Chuyển bản đồ sang hiển thị dự báo AI thay vì dữ liệu thực tế",
+        )
+
+    # ── TASK #27: Nếu toggle dự báo → thay congestion_level + color ──────
+    if show_prediction:
+        preds = get_predictions()  # list [{street_id, predicted_level, confidence}, ...]
+        if preds:
+            pred_map = {p["street_id"]: p.get("predicted_level") for p in preds}
+            df = df.copy()
+            # Ghi đè congestion_level theo dự báo
+            df["congestion_level"] = df["street_id"].map(
+                lambda sid: pred_map.get(sid, None)
+            )
+            # BUG FIX: cập nhật cột color — Pydeck đọc color, không đọc congestion_level!
+            df["color"] = df["congestion_level"].map(
+                lambda lv: _PREDICT_COLORS.get(int(lv), [107, 114, 128, 150])
+                if lv is not None and str(lv) != "nan"
+                else [107, 114, 128, 150]
+            )
+
+        # Banner dự báo — TASK #27d
+        st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, rgba(126,34,206,0.18), rgba(168,85,247,0.10));
+            border: 1px solid rgba(168,85,247,0.35);
+            border-radius: 12px;
+            padding: 10px 18px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.875rem;
+        ">
+            <span style="font-size:1.2rem">📡</span>
+            <span style="color:#c084fc;font-weight:700">CHẾ ĐỘ DỰ BÁO AI</span>
+            <span style="color:#94a3b8">· Hiển thị mức ùn tắc dự kiến sau 30 phút.</span>
+            <span style="color:#6b7280;font-size:0.78rem;margin-left:auto">Màu tím = dự báo</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     # ── Map (SCRUM 8,9,10) ────────────────────────────────────────
     render_map(df, height=560, view_lat=view_lat, view_lon=view_lon, view_zoom=view_zoom)

@@ -1,6 +1,6 @@
 """
 shared/api/client.py — HTTP Client tập trung
-v1.2 — Sprint 3: thêm get_predictions(), get_hourly_trend(), get_heatmap(), get_report()
+v1.3 — Sprint 3: thêm get_weather_current() cho widget thời tiết sidebar
 
 Tất cả giao tiếp với Backend FastAPI đều đi qua đây.
 KHÔNG import trực tiếp httpx ở bất kỳ file khác.
@@ -153,3 +153,24 @@ def get_route(origin_id: int, dest_id: int) -> dict:
     """GET /api/route?origin=&dest= — tìm đường A*."""
     # TODO Sprint 4
     pass
+
+
+# ── Sprint 3: Weather ─────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=300)  # cache 5 phút — weather không đổi quá nhanh
+def get_weather_current() -> dict:
+    """
+    GET /api/weather/current — thời tiết Đà Nẵng hiện tại.
+    Trả về dict: temperature, humidity, wind_speed, rain_1h_mm,
+                 is_raining, visibility_km, weather_group, weather_id.
+    Fallback về {} nếu backend không khả dụng.
+    """
+    try:
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/weather/current",
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception:
+        return {}

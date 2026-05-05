@@ -304,6 +304,10 @@ with tab36:
         )
 
     df_show = df_pred.copy()
+    # ── Áp dụng lọc quận từ sidebar ──────────────────────────────
+    if district_filter != "Tất cả quận":
+        df_show = df_show[df_show["district_name"].str.contains(district_filter, case=False, na=False)]
+    # ── Áp dụng lọc tìm kiếm + xu hướng ─────────────────────────
     if search_pred:
         df_show = df_show[df_show["street_name"].str.contains(search_pred, case=False, na=False)]
     if filter_change == "▲ Xấu hơn":
