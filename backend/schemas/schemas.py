@@ -6,3 +6,12 @@ class TrafficRecord(BaseModel):
     speed: float          # km/h
     congestion_level: int # 1=xanh, 2=vàng, 3=đỏ
     updated_at: datetime
+# Thêm vào backend/schemas.py  ← A sở hữu
+class PredictedRecord(BaseModel):
+    road_id:         int
+    road_name:       str
+    lat:             Optional[float]
+    lng:             Optional[float]
+    predicted_level: int      # 1=xanh, 2=vàng, 3=đỏ
+    confidence:      float    # 0.0 - 1.0
+    predicted_at:    str

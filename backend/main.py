@@ -25,6 +25,7 @@ from routers import streets
 from routers import traffic
 from routers import auth
 from routers import users
+from routers import predict
 log = logging.getLogger("main")
 
 
@@ -68,6 +69,7 @@ app.include_router(streets.router,  prefix="/api", tags=["Streets"])
 app.include_router(traffic.router,  prefix="/api", tags=["Traffic"])
 app.include_router(auth.router,     prefix="/api", tags=["Auth"])
 app.include_router(users.router,    prefix="/api", tags=["Users"])
+app.include_router(predict.router,  prefix="/api", tags=["Predict"])
 # TODO: Thêm router theo từng sprint
 # app.include_router(predict.router,   prefix="/api", tags=["Predict"])
 # app.include_router(route.router,     prefix="/api", tags=["Route"])
