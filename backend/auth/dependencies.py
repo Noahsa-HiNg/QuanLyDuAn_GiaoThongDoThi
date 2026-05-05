@@ -50,5 +50,19 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Bạn không có quyền thực hiện thao tác này (cần quyền admin)",
         )
-    return current_user    
+    return current_user
 
+
+def require_csgt(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Dependency: cho phép cả 'csgt' lẫn 'admin'.
+    Dùng cho route cần đăng nhập nhưng không yêu cầu quyền admin:
+        @router.post("/traffic/crawl")
+        def crawl(user: User = Depends(require_csgt)):
+    """
+    if current_user.role not in ("csgt", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền thực hiện thao tác này",
+        )
+    return current_user

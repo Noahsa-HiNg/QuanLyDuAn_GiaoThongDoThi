@@ -38,5 +38,5 @@ def decode_access_token(token:str) -> dict:
             algorithms=[settings.jwt_algorithm]
         )
         return payload
-    except JWTError as e:
-        raise JWTError(str(e))
+    except JWTError:
+        return None

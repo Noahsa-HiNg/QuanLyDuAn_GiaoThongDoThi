@@ -31,6 +31,9 @@ from schemas.traffic import TrafficCurrentOut, TrafficSummaryOut, TZ_DANANG
 from utils.geometry import split_path_into_zones
 from services import cache as cache_svc   # Redis cache layer
 
+from auth.dependencies import require_csgt, require_admin
+from models.user import User
+
 router = APIRouter()
 
 # Map congestion_level → nhãn tiếng Việt
@@ -404,7 +407,7 @@ Cào dữ liệu TomTom cho **tất cả tuyến đường** đúng **1 lần**.
     status_code=202,
 )
 def trigger_crawl_once(
-    background_tasks: BackgroundTasks, db: Session = Depends(get_db)
+    background_tasks: BackgroundTasks, db: Session = Depends(get_db),user: User = Depends(require_csgt)
 ):
     with _crawl_once_lock:
         if _crawl_once_status["running"]:
@@ -496,7 +499,8 @@ Bắt đầu vòng lặp cào tất cả đường, lặp lại sau mỗi `inter
     status_code=202,
 )
 def start_crawl_loop(
-    interval_seconds: int = Query(600, ge=60, description="Khoảng cách giữa 2 chu kỳ (giây, tối thiểu 60s)")
+    interval_seconds: int = Query(600, ge=60, description="Khoảng cách giữa 2 chu kỳ (giây, tối thiểu 60s)"),
+    current_user: User = Depends(require_admin), 
 ):
     global _loop_stop_event, _loop_thread
 
@@ -536,7 +540,9 @@ def start_crawl_loop(
     "/traffic/crawl/loop/stop",
     summary="[Chế độ 2] Dừng vòng lặp cào liên tục",
 )
-def stop_crawl_loop():
+def stop_crawl_loop(
+    current_user: User = Depends(require_admin),
+):
     with _loop_lock:
         if not _loop_status["running"]:
             raise HTTPException(
@@ -586,6 +592,7 @@ Cào dữ liệu TomTom cho **đúng 1 tuyến đường** theo `street_id`, đ�
 def trigger_crawl_one(
     street_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_csgt),
 ):
     from services.traffic_crawl import crawl_one_street
     result = crawl_one_street(db, street_id)
@@ -610,7 +617,9 @@ Trả về danh sách tất cả job cào đang được lên lịch trong APSch
 Mỗi job bao gồm: `id`, `name`, `trigger` (cron expression), `next_run_at`.
 """,
 )
-def get_schedule_jobs():
+def get_schedule_jobs(
+    current_user: User = Depends(require_admin),
+):
     from services.scheduler import list_jobs, scheduler_state
     return {
         "scheduler": scheduler_state(),
@@ -622,7 +631,9 @@ def get_schedule_jobs():
     "/traffic/schedule/state",
     summary="Trạng thái tổng quan của APScheduler",
 )
-def get_scheduler_state():
+def get_scheduler_state(
+    current_user: User = Depends(require_admin),
+):
     from services.scheduler import scheduler_state, list_jobs
     state = scheduler_state()
     state["jobs"] = list_jobs()
@@ -634,7 +645,9 @@ def get_scheduler_state():
     summary="Tạm dừng toàn bộ APScheduler",
     description="Tạm dừng tất cả job — không mất cấu hình, gọi `/resume` để tiếp tục.",
 )
-def pause_schedule():
+def pause_schedule(
+    current_user: User = Depends(require_admin),
+):
     from services.scheduler import pause_scheduler, scheduler_state
     pause_scheduler()
     return {
@@ -647,7 +660,9 @@ def pause_schedule():
     "/traffic/schedule/resume",
     summary="Tiếp tục APScheduler sau khi tạm dừng",
 )
-def resume_schedule():
+def resume_schedule(
+    current_user: User = Depends(require_admin),
+):
     from services.scheduler import resume_scheduler, scheduler_state
     resume_scheduler()
     return {
@@ -669,7 +684,10 @@ Kích hoạt 1 job chạy ngay lập tức mà không phá vỡ lịch định k
 - `crawl_offpeak_evening`— 🌙 Buổi tối
 """,
 )
-def run_job_now(job_id: str):
+def run_job_now(
+    job_id: str,
+    current_user: User = Depends(require_admin),
+):
     from services.scheduler import run_job_now as _run_now
     found = _run_now(job_id)
     if not found:
@@ -701,6 +719,7 @@ def add_schedule_job(
     minutes   : int = Query(..., ge=5,  description="Cào mỗi N phút (tối thiểu 5)"),
     hour_start: int = Query(0,  ge=0, le=23, description="Giờ bắt đầu (0–23)"),
     hour_end  : int = Query(23, ge=0, le=23, description="Giờ kết thúc (0–23)"),
+    current_user: User = Depends(require_admin),
 ):
     if hour_start >= hour_end:
         raise HTTPException(
@@ -719,7 +738,10 @@ def add_schedule_job(
     "/traffic/schedule/{job_id}",
     summary="Xóa 1 scheduled job",
 )
-def remove_schedule_job(job_id: str):
+def remove_schedule_job(
+    job_id: str,
+    current_user: User = Depends(require_admin),
+):
     from services.scheduler import remove_job
     found = remove_job(job_id)
     if not found:
