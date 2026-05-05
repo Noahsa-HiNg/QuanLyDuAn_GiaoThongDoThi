@@ -17,20 +17,17 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from shared.utils.css_loader import setup_ui
+from shared.utils.auth_guard import require_login
+from shared.components.sidebar import render_sidebar
 from shared.api.client import (
     get_predictions, get_hourly_trend,
     get_heatmap_data, get_report,
 )
 from config import APP_TITLE, APP_VERSION
 
-# ── Page config ──────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title=f"Dashboard | {APP_TITLE}",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 setup_ui()
+require_login()   # ← Chặn guest: redirect về /login nếu chưa đăng nhập
+render_sidebar(show_map_controls=False)
 
 # ── CSS: animation fadeIn + table style ──────────────────────────────────────
 st.markdown("""
@@ -197,22 +194,8 @@ st.markdown("""
 <hr style="border-color:rgba(255,255,255,0.07);margin:0 0 16px">
 """, unsafe_allow_html=True)
 
-# ── Sidebar Dashboard ─────────────────────────────────────────────────────────
+# ── Sidebar Dashboard — chỉ filters, branding/nav từ render_sidebar() ─────────
 with st.sidebar:
-    st.markdown("""
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 0 16px">
-            <div style="font-size:1.7rem;line-height:1">📊</div>
-            <div>
-                <div style="font-size:1rem;font-weight:700;color:#f1f5f9;line-height:1.3">
-                    Dashboard
-                </div>
-                <div style="font-size:0.74rem;color:#64748b;margin-top:2px">
-                    Phân tích Giao thông Đà Nẵng
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
     st.divider()
 
     st.markdown('<p style="font-size:0.78rem;color:#94a3b8;margin-bottom:4px">📅 Khoảng thời gian</p>',

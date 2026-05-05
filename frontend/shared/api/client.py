@@ -174,3 +174,223 @@ def get_weather_current() -> dict:
         return _json_utf8(resp)
     except Exception:
         return {}
+
+
+# ── Sprint 4 — Admin API (yêu cầu Bearer token) ──────────────────────────────
+
+def _auth_headers(token: str) -> dict:
+    """Tạo Authorization header từ JWT token."""
+    return {"Authorization": f"Bearer {token}"}
+
+
+# ── User management ───────────────────────────────────────────────────────────
+
+def admin_get_users(token: str) -> list:
+    """GET /api/users — danh sách tất cả tài khoản (Admin only)."""
+    try:
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/users",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception:
+        return []
+
+
+def admin_create_user(token: str, email: str, password: str,
+                      full_name: str, role: str) -> dict:
+    """POST /api/users — tạo tài khoản mới (Admin only)."""
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/users",
+            headers=_auth_headers(token),
+            json={"email": email, "password": password,
+                  "full_name": full_name, "role": role},
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True, "data": _json_utf8(resp)}
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return {"ok": False, "error": detail}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def admin_lock_user(token: str, user_id: int) -> dict:
+    """POST /api/users/{id}/lock — khóa tài khoản (Admin only)."""
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/users/{user_id}/lock",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True}
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return {"ok": False, "error": detail}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def admin_unlock_user(token: str, user_id: int) -> dict:
+    """POST /api/users/{id}/unlock — mở khóa tài khoản (Admin only)."""
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/users/{user_id}/unlock",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True}
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return {"ok": False, "error": detail}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def admin_deactivate_user(token: str, user_id: int) -> dict:
+    """DELETE /api/users/{id} — vô hiệu hóa tài khoản (Admin only)."""
+    try:
+        resp = httpx.delete(
+            f"{BACKEND_URL}/api/users/{user_id}",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True}
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return {"ok": False, "error": detail}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── Scheduler management ──────────────────────────────────────────────────────
+
+def admin_get_schedule_state(token: str) -> dict:
+    """GET /api/traffic/schedule/state — trạng thái APScheduler."""
+    try:
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/traffic/schedule/state",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception:
+        return {}
+
+
+def admin_get_schedule_jobs(token: str) -> list:
+    """GET /api/traffic/schedule/jobs — danh sách jobs đang chạy."""
+    try:
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/traffic/schedule/jobs",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception:
+        return []
+
+
+def admin_pause_schedule(token: str) -> dict:
+    """POST /api/traffic/schedule/pause — tạm dừng scheduler."""
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/traffic/schedule/pause",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True, "data": _json_utf8(resp)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def admin_resume_schedule(token: str) -> dict:
+    """POST /api/traffic/schedule/resume — tiếp tục scheduler."""
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/traffic/schedule/resume",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True, "data": _json_utf8(resp)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def admin_crawl_now(token: str) -> dict:
+    """POST /api/traffic/crawl — kích hoạt cào thủ công ngay."""
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/traffic/crawl",
+            headers=_auth_headers(token),
+            timeout=60,   # crawl có thể mất thời gian
+        )
+        resp.raise_for_status()
+        return {"ok": True, "data": _json_utf8(resp)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def admin_get_crawl_status(token: str) -> dict:
+    """GET /api/traffic/crawl/status — trạng thái lần cào gần nhất."""
+    try:
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/traffic/crawl/status",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception:
+        return {}
+
+
+# ── Sprint 5 ──────────────────────────────────────────────────────────────────
+
+def get_route_api(
+    from_lat: float,
+    from_lng: float,
+    to_lat: float,
+    to_lng: float,
+    mode: str = "shortest",
+) -> dict:
+    """GET /api/routes — Tìm đường A* (ngắn nhất hoặc nhanh nhất)."""
+    try:
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/routes",
+            params={
+                "from_lat": from_lat,
+                "from_lng": from_lng,
+                "to_lat":   to_lat,
+                "to_lng":   to_lng,
+                "mode":     mode,
+            },
+            timeout=30,   # A* có thể mất vài giây lần đầu build graph
+        )
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception as e:
+        return {"error": str(e)}

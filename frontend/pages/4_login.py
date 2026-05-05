@@ -15,17 +15,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import streamlit as st
 from shared.utils.css_loader import setup_ui
+from shared.components.sidebar import render_sidebar
 from shared.api.client import post_login
 from config import APP_TITLE, APP_ICON, APP_VERSION
 
-# ── Page config ───────────────────────────────────────────────────
-st.set_page_config(
-    page_title=f"Đăng nhập | {APP_TITLE}",
-    page_icon="🔐",
-    layout="wide",
-    initial_sidebar_state="collapsed",   # ← ẩn sidebar, login không cần
-)
 setup_ui()
+render_sidebar(show_map_controls=False)
 
 # ── Helpers ───────────────────────────────────────────────────────
 def _do_logout() -> None:
@@ -201,6 +196,15 @@ div[data-testid="stTextInput"] input {
     font-size: 0.95rem !important;
     transition: all 0.3s ease !important;
 }
+/* Nhường chỗ cho icon mắt ở password field — tránh bị đè */
+div[data-testid="stTextInput"] input[type="password"],
+div[data-testid="stTextInput"] input[type="text"]:not([aria-label*="mail"]) {
+    padding-right: 52px !important;
+}
+/* Ẩn hint "Press Enter to submit" — bị đè lên icon mắt */
+div[data-testid="stTextInput"] [data-testid="InputInstructions"] {
+    display: none !important;
+}
 div[data-testid="stTextInput"] input:focus {
     border-color: rgba(99,102,241,0.6) !important;
     box-shadow: 0 0 0 3px rgba(99,102,241,0.15),
@@ -361,7 +365,7 @@ with col:
                 st.session_state["user_role"]  = user_info.get("role", "")
                 st.session_state["logged_in"]  = True
                 st.success(f"✅ Xin chào, **{st.session_state['user_name']}**!")
-                st.rerun()
+                st.switch_page("pages/1_home.py")   # ← chuyển về Home ngay sau login
             else:
                 st.markdown("""
                 <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);

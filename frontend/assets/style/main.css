@@ -5,6 +5,9 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
+/* ── Ẩn Streamlit native nav — custom nav theo role thay thế ────── */
+[data-testid="stSidebarNav"] { display: none !important; }
+
 /* ── Animations ──────────────────────────────────────────────── */
 @keyframes pulse-dot   { 0%,100%{opacity:1;box-shadow:0 0 8px #4ade80} 50%{opacity:.5;box-shadow:0 0 16px #4ade80} }
 @keyframes float-in    { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }

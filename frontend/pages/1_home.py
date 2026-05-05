@@ -89,15 +89,7 @@ def _compute_view(
     return (MAP_CENTER_LAT, MAP_CENTER_LON, MAP_ZOOM)
 
 
-# ── Page config (phải là lệnh Streamlit đầu tiên) ────────────────
-st.set_page_config(
-    page_title=f"Bản đồ | {APP_TITLE}",
-    page_icon=APP_ICON,
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# ── Inject CSS + ambient blobs (PHẢI sau set_page_config) ────────
+# ── Inject CSS + ambient blobs ────────────────────────────────────
 setup_ui()
 
 # ── Auto-refresh mỗi 60 giây — FIX 4: lấy count để tính countdown ──

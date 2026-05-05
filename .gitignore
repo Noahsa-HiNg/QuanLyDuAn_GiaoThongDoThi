@@ -6,6 +6,11 @@
 !.env.example          # Giữ lại file mẫu để người khác biết cần khai báo gì
 
 # ═══════════════════════════════════════
+# DATABASE DUMP (file tạm, không commit)
+# ═══════════════════════════════════════
+traffic_dump_utf8.sql  # sinh ra khi convert encoding để import
+
+# ═══════════════════════════════════════
 # PYTHON
 # ═══════════════════════════════════════
 __pycache__/
