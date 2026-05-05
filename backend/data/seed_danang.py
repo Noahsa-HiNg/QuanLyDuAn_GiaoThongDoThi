@@ -42,7 +42,7 @@ DISTRICTS = [
 # ─── 50 TUYẾN ĐƯỜNG ───────────────────────────────────────────────────────────
 STREETS_DATA = [
     # Hải Châu
-    {"name": "Bạch Đằng",            "district": "Hải Châu",     "max_speed": 50, "one_way": False, "lat": 16.0676, "lng": 108.2218, "km": 2.8},
+    {"name": "Bạch Đằng",            "district": "Hải Châu",     "max_speed": 50, "one_way": True, "lat": 16.0676, "lng": 108.2218, "km": 2.8},
     {"name": "Trần Phú",             "district": "Hải Châu",     "max_speed": 60, "one_way": False, "lat": 16.0660, "lng": 108.2125, "km": 3.1},
     {"name": "Lê Duẩn",              "district": "Hải Châu",     "max_speed": 60, "one_way": False, "lat": 16.0636, "lng": 108.2126, "km": 4.2},
     {"name": "Hùng Vương",           "district": "Hải Châu",     "max_speed": 50, "one_way": False, "lat": 16.0668, "lng": 108.2096, "km": 2.5},
@@ -98,6 +98,15 @@ STREETS_DATA = [
     {"name": "30 tháng 4",           "district": "Hải Châu",     "max_speed": 50, "one_way": False, "lat": 16.0561, "lng": 108.2166, "km": 2.1},
     {"name": "2 tháng 9",            "district": "Hải Châu",     "max_speed": 60, "one_way": False, "lat": 16.0420, "lng": 108.2122, "km": 7.4},
     {"name": "Nguyễn Hữu Thọ",      "district": "Cẩm Lệ",       "max_speed": 60, "one_way": False, "lat": 16.0328, "lng": 108.2067, "km": 4.6},
+    # ── Đường mới thêm (khu vực trung tâm Hải Châu) ─────────────────────────
+    {"name": "Yên Bái",              "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0681, "lng": 108.2226, "km": 0.93},
+    {"name": "Nguyễn Thái Học",      "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0681, "lng": 108.2225, "km": 0.50},
+    {"name": "Trần Quốc Toản",       "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0662, "lng": 108.2221, "km": 0.48},
+    {"name": "Thái Phiên",           "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0651, "lng": 108.2214, "km": 0.51},
+    {"name": "Lê Hồng Phong",        "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0640, "lng": 108.2217, "km": 0.73},
+    {"name": "Hoàng Văn Thụ",        "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0629, "lng": 108.2208, "km": 0.58},
+    {"name": "Phạm Hồng Thái",       "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0674, "lng": 108.2214, "km": 0.25},
+    {"name": "Phạm Phú Thứ",         "district": "Hải Châu",     "max_speed": 40, "one_way": True,  "lat": 16.0673, "lng": 108.2244, "km": 0.12},
 ]
 
 
