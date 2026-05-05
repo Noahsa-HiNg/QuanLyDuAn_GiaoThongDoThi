@@ -28,10 +28,18 @@ class AuthService:
         # 2. Tài khoản có active không?
         if not user.is_active:
             return None
-        # 3. Brute-force: kiểm tra khóa tạm thời
+        # 3. Kiểm tra khóa tài khoản:
+        #    - Khóa thủ công bởi Admin: is_locked=True, locked_until=NULL → khóa vô thời hạn
+        #    - Khóa brute-force:        is_locked=True, locked_until > NOW → hết 15 phút tự mở
         now = datetime.now(timezone.utc)
-        if user.is_locked and user.locked_until and user.locked_until > now:
-            return None  # Tài khoản đang bị khóa, chưa hết thời gian
+        if user.is_locked:
+            if user.locked_until is None:
+                return None  # Khóa thủ công vô thời hạn → từ chối
+            if user.locked_until > now:
+                return None  # Brute-force, chưa hết thời gian khóa → từ chối
+            # locked_until <= now: hết hạn → tự động mở khóa brute-force
+            user.is_locked = False
+            user.locked_until = None
         # 4. Verify password
         if not verify_password(password, user.password_hash):
             # Sai mật khẩu → tăng failed_attempts
@@ -62,4 +70,4 @@ class AuthService:
 
 
 # Singleton instance — router import object này
-auth_service = AuthService()
+auth_service = AuthService()
