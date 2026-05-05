@@ -5,11 +5,15 @@ TokenResponse : response trả về sau khi login thành công
 UserInfo      : thông tin user nhúng trong response (không có password)
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    email:    EmailStr
+    password: str = Field(
+        ...,
+        min_length=8,
+        description="Mật khẩu tối thiểu 8 ký tự"
+    )
 
 class UserInfo(BaseModel):
     id: int
