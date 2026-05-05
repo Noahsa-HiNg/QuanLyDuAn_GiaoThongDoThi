@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ml.constants import FEATURES
-from ml.feature_engineering import compute_features
+from ml.features import compute_features
 
 logger = logging.getLogger(__name__)
 

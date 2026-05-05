@@ -1,3 +1,7 @@
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
+
 class TrafficRecord(BaseModel):
     road_id: int
     road_name: str
