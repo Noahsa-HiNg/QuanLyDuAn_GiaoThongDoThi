@@ -31,6 +31,7 @@ from models import Street, TrafficData
 from schemas.traffic import TrafficCurrentOut, TrafficSummaryOut, TZ_DANANG
 from utils.geometry import split_path_into_zones
 from services import cache as cache_svc   # Redis cache layer
+from redis_client import redis_client     # Dùng trực tiếp cho geometry/state cache
 
 from auth.dependencies import require_csgt, require_admin
 from models.user import User
@@ -388,6 +389,207 @@ def get_traffic_current(
         cache_svc.set_traffic(response)
 
     return JSONResponse(content=response)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/streets/geometry — Geometry tĩnh (load 1 lần, cache dài)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get(
+    "/traffic/streets-geometry",
+    summary="Geometry tất cả tuyến đường (load 1 lần)",
+    description="""
+Trả về **geometry (tọa độ vẽ đường)** của tất cả tuyến đường có traffic data.
+
+**Mục đích:** Tách geometry (tĩnh, ~17MB) ra khỏi traffic state (động, ~1MB).
+Frontend chỉ cần gọi endpoint này **1 lần duy nhất** rồi lưu vào `st.session_state`.
+
+**Kết hợp với:** `GET /api/traffic/state` để lấy trạng thái giao thông.
+
+**Cache:** 1 giờ (geometry đường không thay đổi thường xuyên).
+""",
+    response_class=Response,
+    tags=["Streets"],
+)
+def get_streets_geometry(db: Session = Depends(get_db)):
+    """
+    Trả raw JSON geometry của tất cả đường có traffic data.
+    Cache Redis 1 giờ — geometry gần như không thay đổi.
+    """
+    import services.cache as _cache
+
+    CACHE_KEY_GEOMETRY = "streets:geometry"
+    TTL_GEOMETRY = 3600  # 1 giờ
+
+    # ── Kiểm tra cache ─────────────────────────────────────────────────────
+    raw = redis_client.get(CACHE_KEY_GEOMETRY)
+    if raw is not None:
+        return Response(content=raw, media_type="application/json")
+
+    # ── Cache MISS → query DB ──────────────────────────────────────────────
+    rows = db.execute(text("""
+        SELECT
+            s.id                                            AS street_id,
+            s.name                                          AS street_name,
+            d.name                                          AS district_name,
+            s.max_speed,
+            ST_Y(ST_Centroid(s.geometry))                   AS lat,
+            ST_X(ST_Centroid(s.geometry))                   AS lon,
+            (ST_AsGeoJSON(s.geometry)::json -> 'coordinates') AS coords,
+            COUNT(lt.segment_idx)                           AS segment_count
+        FROM streets s
+        LEFT JOIN districts d   ON s.district_id = d.id
+        JOIN  latest_traffic lt ON lt.street_id  = s.id
+        WHERE s.geometry IS NOT NULL
+        GROUP BY s.id, s.name, d.name, s.max_speed, s.geometry
+        ORDER BY s.name
+    """)).fetchall()
+
+    streets = []
+    for row in rows:
+        coords = None
+        if row.coords:
+            c = json.loads(row.coords) if isinstance(row.coords, str) else row.coords
+            if c and len(c) >= 2:
+                coords = c
+
+        streets.append({
+            "street_id"    : row.street_id,
+            "street_name"  : row.street_name,
+            "district_name": row.district_name,
+            "max_speed"    : row.max_speed,
+            "lat"          : row.lat,
+            "lon"          : row.lon,
+            "path"         : coords,
+            "segment_count": row.segment_count,
+        })
+
+    result = {"total": len(streets), "streets": streets}
+    raw_json = json.dumps(result, ensure_ascii=False, default=str)
+
+    # ── Lưu cache 1 giờ ───────────────────────────────────────────────────
+    redis_client.setex(name=CACHE_KEY_GEOMETRY, time=TTL_GEOMETRY, value=raw_json)
+
+    return Response(content=raw_json, media_type="application/json")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/traffic/state — Trạng thái giao thông nhẹ (refresh thường xuyên)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get(
+    "/traffic/state",
+    summary="Trạng thái giao thông (nhẹ, chỉ màu + tốc độ)",
+    description="""
+Trả về **trạng thái giao thông** của tất cả tuyến đường — **không có geometry**.
+
+**Mục đích:** Endpoint nhẹ (~1MB) để refresh thường xuyên mà không phải tải lại geometry.
+
+**Kết hợp với:** `GET /api/streets/geometry` (load 1 lần, lưu session_state).
+
+**Cache:** 270 giây (cùng chu kỳ cào dữ liệu).
+
+**Cấu trúc mỗi phần tử:**
+```json
+{
+  "street_id": 1,
+  "congestion_level": 0,
+  "congestion_label": "Thông thoáng",
+  "avg_speed": 55.2,
+  "color": [34, 197, 94, 220],
+  "segments": [{"segment_idx": 0, "congestion_level": 0, "color": [...]}]
+}
+```
+
+**Congestion levels:** 0=Xanh, 1=Vàng, 2=Đỏ, null=Không có data.
+""",
+    response_class=Response,
+)
+def get_traffic_state(db: Session = Depends(get_db)):
+    """
+    Trả trạng thái giao thông nhẹ (không geometry).
+    Cache Redis 270s — cùng chu kỳ cào.
+    """
+    CACHE_KEY_STATE = "traffic:state"
+    TTL_STATE = 270
+
+    # ── Kiểm tra cache ─────────────────────────────────────────────────────
+    raw = redis_client.get(CACHE_KEY_STATE)
+    if raw is not None:
+        return Response(content=raw, media_type="application/json")
+
+    # ── Cache MISS → query latest_traffic ─────────────────────────────────
+    rows = db.execute(text("""
+        SELECT
+            lt.street_id,
+            lt.segment_idx,
+            lt.avg_speed,
+            lt.congestion_level,
+            lt.source,
+            lt.timestamp
+        FROM latest_traffic lt
+        ORDER BY lt.street_id, lt.segment_idx
+    """)).fetchall()
+
+    if not rows:
+        return Response(
+            content=json.dumps({"total": 0, "streets": [], "data_as_of": None}),
+            media_type="application/json"
+        )
+
+    # ── Nhóm theo street_id ────────────────────────────────────────────────
+    from collections import defaultdict
+    street_segs: dict = defaultdict(list)
+    for row in rows:
+        street_segs[row.street_id].append(row)
+
+    streets_out = []
+    timestamps_all = []
+
+    for street_id, segs in sorted(street_segs.items()):
+        levels = [s.congestion_level for s in segs if s.congestion_level is not None]
+        speeds = [s.avg_speed        for s in segs if s.avg_speed        is not None]
+        avg_cong = round(sum(levels) / len(levels)) if levels else None
+        avg_spd  = round(sum(speeds)  / len(speeds), 1) if speeds else None
+
+        ts = segs[0].timestamp
+        if ts:
+            timestamps_all.append(ts)
+
+        segments_out = [
+            {
+                "segment_idx"    : s.segment_idx,
+                "congestion_level": s.congestion_level,
+                "avg_speed"      : s.avg_speed,
+                "color"          : CONGESTION_COLORS.get(s.congestion_level,
+                                                         CONGESTION_COLORS[None]),
+            }
+            for s in segs
+        ]
+
+        streets_out.append({
+            "street_id"      : street_id,
+            "congestion_level": avg_cong,
+            "congestion_label": CONGESTION_LABEL.get(avg_cong),
+            "avg_speed"      : avg_spd,
+            "color"          : CONGESTION_COLORS.get(avg_cong, CONGESTION_COLORS[None]),
+            "source"         : segs[0].source,
+            "timestamp"      : ts.isoformat() if ts else None,
+            "segments"       : segments_out,
+        })
+
+    data_as_of = max(timestamps_all).isoformat() if timestamps_all else None
+
+    result = {
+        "total"     : len(streets_out),
+        "data_as_of": data_as_of,
+        "streets"   : streets_out,
+    }
+    raw_json = json.dumps(result, ensure_ascii=False, default=str)
+
+    # ── Lưu cache 270s ─────────────────────────────────────────────────────
+    redis_client.setex(name=CACHE_KEY_STATE, time=TTL_STATE, value=raw_json)
+
+    return Response(content=raw_json, media_type="application/json")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /api/traffic/current/{street_id} — 1 tuyến đường cụ thể
