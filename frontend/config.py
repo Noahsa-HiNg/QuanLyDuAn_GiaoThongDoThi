@@ -36,3 +36,15 @@ STREETS_CACHE_TTL = 300   # 5 phút — geometry ít thay đổi
 
 # ── HTTP ──────────────────────────────────────────────────────────────
 REQUEST_TIMEOUT = 30.0    # giây
+
+# ── Mapbox ────────────────────────────────────────────────────────────
+# Token do teammate cung cấp — 50k map loads/tháng, dùng cẩn thận
+# Nếu không có token → fallback về CartoDB (không cần token)
+MAPBOX_TOKEN: str = os.getenv("MAPBOX_TOKEN", "")
+
+# Map style — tự động chọn Mapbox nếu có token, ngược lại dùng CartoDB
+MAP_STYLE: str = (
+    "mapbox://styles/mapbox/dark-v11"
+    if MAPBOX_TOKEN
+    else "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
+)

@@ -1,13 +1,14 @@
 """
 features/map/service.py — Business Logic: Bản đồ Giao thông
 v1.4 — FIX 1: lat/lon centroid thêm vào base (dùng cho map zoom SCRUM-22/24)
+v1.5 — OPT: 2-step loading (geometry tĩnh + state động) giảm reload 3-5s → <1s
 """
 
 import pandas as pd
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from shared.api.client import get_traffic_current
+from shared.api.client import get_traffic_current, get_streets_geometry, get_traffic_state
 from shared.utils.colors import get_color
 from shared.utils.formatters import congestion_label
 
@@ -113,3 +114,60 @@ def filter_dataframe(
 
     return df
 
+
+
+def build_map_dataframe_split(geometry: dict, state: dict) -> tuple:
+    """
+    Merge geometry (tinh, cache 1h) + state (dong, poll 60s) -> DataFrame + meta KPI.
+    geometry tu GET /api/traffic/streets-geometry
+    state tu GET /api/traffic/state
+    Tra ve (df, meta) - meta tuong thich voi render_kpi_cards().
+    """
+    state_map = {s["street_id"]: s for s in state.get("streets", [])}
+
+    rows = []
+    green = yellow = red = no_data = 0
+    speeds = []
+
+    for g in geometry.get("streets", []):
+        sid   = g["street_id"]
+        s     = state_map.get(sid, {})
+        level = s.get("congestion_level")
+        color = s.get("color") or [107, 114, 128, 150]
+        spd   = s.get("avg_speed")
+
+        if   level == 0: green   += 1
+        elif level == 1: yellow  += 1
+        elif level == 2: red     += 1
+        else:            no_data += 1
+
+        if spd is not None:
+            speeds.append(spd)
+
+        rows.append({
+            "street_id"       : sid,
+            "name"            : g.get("street_name", ""),
+            "district"        : g.get("district_name", ""),
+            "avg_speed"       : spd or 0,
+            "max_speed"       : g.get("max_speed") or 50,
+            "congestion_level": level,
+            "congestion_label": s.get("congestion_label") or congestion_label(level),
+            "timestamp_vn"    : s.get("timestamp", "-"),
+            "lat"             : g.get("lat") or 16.0544,
+            "lon"             : g.get("lon") or 108.2022,
+            "color"           : color,
+            "path"            : g.get("path"),
+        })
+
+    meta = {
+        "total_streets" : len(rows),
+        "green_count"   : green,
+        "yellow_count"  : yellow,
+        "red_count"     : red,
+        "no_data_count" : no_data,
+        "avg_speed_city": round(sum(speeds) / len(speeds), 1) if speeds else None,
+        "data_as_of"    : state.get("data_as_of"),
+    }
+
+    import pandas as pd
+    return (pd.DataFrame(rows) if rows else pd.DataFrame()), meta

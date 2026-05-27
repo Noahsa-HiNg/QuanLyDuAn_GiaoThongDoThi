@@ -5,7 +5,7 @@ Gọi setup_ui() ở đầu MỖI page để đảm bảo theme + toggle luôn �
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
+import streamlit.components.v1 as components  # vẫn cần cho iframe
 from pathlib import Path
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -43,15 +43,16 @@ def inject_ambient_blobs() -> None:
 
 def inject_sidebar_toggle() -> None:
     """
-    Đọc assets/javascript/sidebar_toggle.js → inject qua st.components.v1.html().
+    Đọc assets/javascript/sidebar_toggle.js → inject qua st.html().
     JS inject button ☰ vào window.parent.document (same-origin: được phép).
+    Đã chuyển sang st.html() — thay thế st.components.v1.html (deprecated 2026-06-01).
     """
     js_path = _JS / "sidebar_toggle.js"
     if not js_path.exists():
         return
     with open(js_path, encoding="utf-8") as f:
         js_content = f.read()
-    components.html(f"<script>{js_content}</script>", height=0, scrolling=False)
+    st.html(f"<script>{js_content}</script>")
 
 
 def setup_ui() -> None:

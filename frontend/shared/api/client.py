@@ -393,5 +393,140 @@ def get_route_api(
         )
         resp.raise_for_status()
         return _json_utf8(resp)
+    except httpx.HTTPStatusError as e:
+        # Lấy message tiếng Việt từ FastAPI detail thay vì raw HTTP error
+        try:
+            detail = e.response.json().get("detail", "Không tìm được đường.")
+        except Exception:
+            detail = str(e)
+        return {"error": detail}
     except Exception as e:
         return {"error": str(e)}
+
+
+def get_street_midpoints() -> list[dict]:
+    """GET /api/streets/midpoints — Lấy midpoint tọa độ từ MANUAL_COORDS."""
+    try:
+        resp = httpx.get(f"{BACKEND_URL}/api/streets/midpoints", timeout=10)
+        resp.raise_for_status()
+        return _json_utf8(resp).get("streets", [])
+    except Exception:
+        return []
+
+
+def get_streets_geometry() -> dict:
+    """GET /api/traffic/streets-geometry — Geometry tĩnh (cache Redis 1h).
+    Chỉ cần gọi 1 lần rồi lưu vào st.session_state.
+    """
+    try:
+        resp = httpx.get(f"{BACKEND_URL}/api/traffic/streets-geometry", timeout=30)
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception:
+        return {"streets": [], "total": 0}
+
+
+def get_traffic_state() -> dict:
+    """GET /api/traffic/state — Trạng thái giao thông nhẹ (~1MB, không có geometry).
+    Poll mỗi 60s — không cần tải lại geometry.
+    """
+    try:
+        resp = httpx.get(f"{BACKEND_URL}/api/traffic/state", timeout=15)
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception:
+        return {"streets": [], "total": 0, "data_as_of": None}
+
+
+# ── Sprint 4 — Incidents CRUD (yêu cầu Bearer token CSGT/Admin) ──────────────
+
+def get_incidents(
+    token: str,
+    is_active: bool | None = None,
+    incident_type: str | None = None,
+    status: str | None = None,
+    page: int = 1,
+    page_size: int = 50,
+) -> list:
+    """GET /api/incidents — danh sách sự cố/lô cốt với filter."""
+    try:
+        params: dict = {"page": page, "page_size": page_size}
+        if is_active is not None:
+            params["is_active"] = str(is_active).lower()
+        if incident_type:
+            params["type"] = incident_type
+        if status:
+            params["status"] = status
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/incidents",
+            headers=_auth_headers(token),
+            params=params,
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return _json_utf8(resp)
+    except Exception as e:
+        print(f"ERROR get_incidents: {e}")
+        return []
+
+
+def create_incident(token: str, data: dict) -> dict:
+    """POST /api/incidents — tạo sự cố mới (CSGT/Admin)."""
+    try:
+        resp = httpx.post(
+            f"{BACKEND_URL}/api/incidents",
+            headers=_auth_headers(token),
+            json=data,
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True, "data": _json_utf8(resp)}
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return {"ok": False, "error": detail}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def update_incident_status(token: str, incident_id: int, new_status: str) -> dict:
+    """PUT /api/incidents/{id} — cập nhật trạng thái sự cố."""
+    try:
+        resp = httpx.put(
+            f"{BACKEND_URL}/api/incidents/{incident_id}",
+            headers=_auth_headers(token),
+            json={"status": new_status},
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True}
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return {"ok": False, "error": detail}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+def delete_incident(token: str, incident_id: int) -> dict:
+    """DELETE /api/incidents/{id} — xóa vĩnh viễn (Admin only)."""
+    try:
+        resp = httpx.delete(
+            f"{BACKEND_URL}/api/incidents/{incident_id}",
+            headers=_auth_headers(token),
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return {"ok": True}
+    except httpx.HTTPStatusError as e:
+        try:
+            detail = e.response.json().get("detail", str(e))
+        except Exception:
+            detail = str(e)
+        return {"ok": False, "error": detail}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}

@@ -19,7 +19,10 @@ from shared.utils.css_loader import setup_ui
 from shared.components.sidebar import render_sidebar
 from shared.components.kpi_cards import render_kpi_cards
 from shared.api.client import get_predictions
-from features.map.service import get_traffic_data, build_map_dataframe, filter_dataframe
+from features.map.service import (
+    get_traffic_data, build_map_dataframe, filter_dataframe,
+    get_streets_geometry, get_traffic_state, build_map_dataframe_split,
+)
 from features.map.components import render_map
 from datetime import datetime, timezone, timedelta
 
@@ -178,27 +181,42 @@ def main() -> None:
     # ── Sidebar (Sprint 3: trả 3 giá trị, toggle dự báo nằm trong main view) ──
     district_id, search_text, congestion_filter = render_sidebar()
 
-    # ── Fetch data (SCRUM 14: spinner) ───────────────────────────
-    with st.spinner("⏳ Đang tải dữ liệu giao thông..."):
-        traffic = get_traffic_data(district_id)
+    # -- Geometry: load 1 lan, luu session_state (khong re-fetch moi 60s) ----------
+    geo = st.session_state.get("map_geometry")
+    if not geo or not geo.get("streets"):
+        with st.spinner("⏳ Đang tải bản đồ (lần đầu)..."):
+            st.session_state.map_geometry = get_streets_geometry()
+    geometry = st.session_state.map_geometry
 
-    # ── Header (FIX 4: countdown thực tế) ────────────────────────
-    render_header(_fmt_time(traffic.get("data_as_of", "")), _seconds_remaining)
+    if district_id is None and geometry.get("streets"):
+        # 2-step: state nhe (~1MB), geometry da cache trong session
+        with st.spinner("⏳ Đang cập nhật giao thông..."):
+            traffic_state = get_traffic_state()
+        df_full, meta = build_map_dataframe_split(geometry, traffic_state)
+    else:
+        # Fallback cho filter quan hoac geometry chua co
+        with st.spinner("⏳ Đang tải dữ liệu giao thông..."):
+            traffic = get_traffic_data(district_id)
+        df_full = build_map_dataframe(traffic)
+        meta    = traffic
+
+    # -- Header -------------------------------------------------------------------
+    render_header(_fmt_time(meta.get("data_as_of", "")), _seconds_remaining)
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── KPI Cards (SCRUM 11) — dựa trên toàn bộ data quận ───────
-    render_kpi_cards(traffic)
+    # -- KPI Cards ----------------------------------------------------------------
+    render_kpi_cards(meta)
 
-    # ── SCRUM-28 + FIX 5: Empty state — backend chưa có data ─────
-    if not traffic.get("streets"):
+    # -- Empty state --------------------------------------------------------------
+    if df_full.empty:
         st.warning("⚠️ Chưa có dữ liệu giao thông. Backend đang khởi động?")
-        # FIX 5: Nút Thử lại để clear cache và reload
-        st.button("🔄 Thử lại", key="btn_retry", on_click=st.cache_data.clear)
+        def _retry():
+            st.session_state.pop("map_geometry", None)
+            st.cache_data.clear()
+        st.button("🔄 Thử lại", key="btn_retry", on_click=_retry)
         render_footer()
         return
 
-    # ── Build DataFrame đầy đủ ───────────────────────────────────
-    df_full = build_map_dataframe(traffic)
 
     # ── SCRUM-22, 23: Áp dụng filter client-side ─────────────────
     df = filter_dataframe(df_full, search=search_text, congestion=congestion_filter)

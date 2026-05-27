@@ -3,6 +3,8 @@ streamlit>=1.31.0
 
 # ── Bản đồ ─────────────────────────────────────
 pydeck>=0.8.0              # Render bản đồ Pydeck / Deck.gl
+folium>=0.16.0             # Bản đồ Leaflet cho route finder
+streamlit-folium>=0.20.0   # Component 2 chiều: click map → Python
 
 # ── Biểu đồ ────────────────────────────────────
 plotly>=5.17.0             # Gauge chart, histogram, bar chart

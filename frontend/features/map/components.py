@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from features.map.layers import build_path_layer, build_scatter_layer, TOOLTIP
-from config import MAP_CENTER_LAT, MAP_CENTER_LON, MAP_ZOOM
+from config import MAP_CENTER_LAT, MAP_CENTER_LON, MAP_ZOOM, MAP_STYLE, MAPBOX_TOKEN
 
 
 def render_map(
@@ -43,7 +43,8 @@ def render_map(
             pitch=0,
             bearing=0,
         ),
-        map_style="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+        map_style=MAP_STYLE,
+        api_keys={"mapbox": MAPBOX_TOKEN} if MAPBOX_TOKEN else {},
         tooltip=TOOLTIP,
     )
 

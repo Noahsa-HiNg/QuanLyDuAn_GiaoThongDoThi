@@ -81,6 +81,32 @@ def get_streets(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# GET /api/streets/midpoints — Midpoint tọa độ từ MANUAL_COORDS
+# ✔ Đặt TRƯỚC /streets/{street_id} → FastAPI không bắt “midpoints” như một integer ID
+# Public endpoint — dùng cho Route Finder
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/streets/midpoints", summary="Midpoint tọa độ các tuyến đường")
+def get_street_midpoints():
+    """
+    Tính midpoint (lat, lng) của từng tuyến đường trong MANUAL_COORDS.
+    Midpoint = phần tử chính giữa của danh sách tọa độ.
+    Format trong MANUAL_COORDS: [lng, lat] → trả về lat, lng.
+    """
+    from data.manual_coords import MANUAL_COORDS
+
+    result = []
+    for name, coords in MANUAL_COORDS.items():
+        if not coords:
+            continue
+        mid = coords[len(coords) // 2]
+        if len(mid) >= 2:
+            lng, lat = float(mid[0]), float(mid[1])
+            result.append({"name": name, "lat": round(lat, 6), "lng": round(lng, 6)})
+
+    return {"streets": result, "total": len(result)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # GET /api/streets/{street_id} — Chi tiết 1 tuyến đường
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get(

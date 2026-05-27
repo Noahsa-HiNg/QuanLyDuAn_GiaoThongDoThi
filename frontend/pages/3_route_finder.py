@@ -1,308 +1,407 @@
 """
-pages/3_route_finder.py — Tìm đường thông minh (Sprint 5)
-
-A* Routing — Ngắn nhất / Nhanh nhất
-Bản đồ Leaflet.js nhúng qua st.components.v1.html
+pages/3_route_finder.py — Tìm đường thông minh
+Sprint 4 | SCRUM-44/45/46
+Layout: 2-row search bar (tên đường + tọa độ) → map full width → kết quả
 """
-import sys, os
+import sys, os, unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import json
+import folium
 import streamlit as st
-import streamlit.components.v1 as components
+from streamlit_folium import st_folium
 
 from shared.utils.css_loader import setup_ui
 from shared.components.sidebar import render_sidebar
-from shared.api.client import get_route_api
+from shared.api.client import get_route_api, get_traffic_current, get_street_midpoints
 
 setup_ui()
-render_sidebar(
-    show_map_controls=False,
-    brand_icon="🗺️",
-    brand_title="Tìm đường thông minh",
-    brand_subtitle="Thuật toán A* — Đà Nẵng",
-)
+render_sidebar(show_map_controls=False, brand_icon="🗺️",
+               brand_title="Tìm đường thông minh",
+               brand_subtitle="Thuật toán A* — Đà Nẵng")
 
-# ── Sidebar decor riêng cho Route Finder ─────────────────────────────────────
-with st.sidebar:
-    st.divider()
-    st.markdown("""
-    <div style="background:rgba(129,140,248,0.08);border:1px solid rgba(129,140,248,0.18);
-                border-radius:14px;padding:14px 16px;margin-bottom:4px">
-        <div style="font-size:0.82rem;font-weight:700;color:#818cf8;margin-bottom:8px">
-            🧭 Thuật toán A*
-        </div>
-        <div style="font-size:0.77rem;color:#94a3b8;line-height:1.7">
-            📏 <b style="color:#e2e8f0">Ngắn nhất</b> — tổng km ít nhất<br>
-            ⚡ <b style="color:#e2e8f0">Nhanh nhất</b> — thời gian ít nhất<br>
-            &nbsp;&nbsp;&nbsp;&nbsp;dựa trên tốc độ thực tế
-        </div>
-    </div>
-    <div style="font-size:0.73rem;color:#475569;padding:6px 2px;line-height:1.7">
-        💡 Chọn điểm và bấm <b style="color:#818cf8">🔍 Tìm</b><br>
-        Bản đồ sẽ hiển thị tuyến đường tối ưu
-    </div>
-    """, unsafe_allow_html=True)
+MAP_CENTER = [16.0544, 108.2022]
+MAP_ZOOM   = 13
+_CLR = {0: "#22c55e", 1: "#eab308", 2: "#ef4444"}
+_LBL = {0: "Thông thoáng", 1: "Chậm", 2: "Kẹt xe"}
 
-# ── Hằng số ───────────────────────────────────────────────────────────────────
-MAP_CENTER = (16.0544, 108.2022)   # Đà Nẵng
+# ── Load tên đường + midpoint từ backend API (cache) ─────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def _load_street_lookup() -> dict:
+    """Gọi API 1 lần, cache 5 phút. Trả về {norm_name: (original, (lat, lng))}."""
+    def _norm(text: str) -> str:
+        text = text.lower().strip().replace("đ", "d")
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join(c for c in nfkd if not unicodedata.combining(c))
+    rows = get_street_midpoints()   # [{name, lat, lng}, ...]
+    return {_norm(r["name"]): (r["name"], (r["lat"], r["lng"]))
+            for r in rows if r.get("name") and r.get("lat") and r.get("lng")}
 
-# Danh sách địa điểm tiêu biểu — (lat, lng)
-LOCATIONS: dict[str, tuple[float, float]] = {
-    "🌉 Cầu Rồng":               (16.0608, 108.2272),
-    "🏪 Chợ Hàn":                (16.0713, 108.2239),
-    "🏖️ Biển Mỹ Khê":            (16.0470, 108.2460),
-    "✈️ Sân bay Đà Nẵng":        (16.0443, 108.1997),
-    "🚌 Bến xe Trung tâm":        (16.0483, 108.2124),
-    "🏛️ UBND TP Đà Nẵng":        (16.0678, 108.2208),
-    "🏥 Bệnh viện C Đà Nẵng":    (16.0612, 108.2151),
-    "🎓 ĐH Bách khoa Đà Nẵng":   (16.0540, 108.2022),
-    "🎓 ĐH Đà Nẵng":             (16.0721, 108.2104),
-    "⛪ Nhà thờ Con Gà":          (16.0711, 108.2248),
-    "🌊 Cầu Thuận Phước":         (16.0850, 108.1980),
-    "🛍️ Vincom Đà Nẵng":         (16.0651, 108.2192),
-    "🏟️ SVĐ Hoà Xuân":           (16.0288, 108.2168),
-    "🌿 Bán đảo Sơn Trà":        (16.1012, 108.2794),
+STREET_LOOKUP = _load_street_lookup()
+
+def _norm(text: str) -> str:
+    """Chuẩn hóa: viết thường + bỏ dấu + đ→d."""
+    text = text.lower().strip().replace("đ", "d")
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+def find_streets(query: str) -> list[tuple]:
+    """Trả về [(tên, (lat,lng))] khớp với query."""
+    q = _norm(query)
+    if not q:
+        return []
+    return [(name, pos) for key, (name, pos) in STREET_LOOKUP.items() if q in key]
+
+# ── Session state ─────────────────────────────────────────────────────────────
+for _k, _v in {
+    "rf_from_pos":  None,
+    "rf_to_pos":    None,
+    "rf_last_click": None,
+    "rf_res_short": None,
+    "rf_res_fast":  None,
+    "rf_selected":  "shortest",
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
+# ── CSS ───────────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.rf-fade{animation:fadeUp .3s ease-out}
+.search-panel{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:16px;padding:16px 20px;margin-bottom:14px;
 }
-
-LOC_NAMES = list(LOCATIONS.keys())
+.coord-badge{
+  font-size:0.74rem;font-family:monospace;
+  padding:4px 10px;border-radius:20px;
+  display:inline-block;margin-top:4px;
+}
+.route-card{
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;padding:16px 18px;transition:all .2s;
+}
+.route-card.best{border-color:rgba(99,102,241,0.45);background:rgba(99,102,241,0.07)}
+/* Căn chỉnh column gap đều nhau */
+[data-testid="column"]{padding-left:6px!important;padding-right:6px!important}
+</style>
+""", unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="padding:20px 0 4px">
-  <h1 style="margin:0;font-size:1.9rem;font-weight:800;letter-spacing:-0.03em;color:#f1f5f9">
-    <span>🗺️</span>
-    <span style="background:linear-gradient(135deg,#f1f5f9 30%,#818cf8 100%);
-                 -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-                 background-clip:text">
-      Tìm đường thông minh
-    </span>
+<div class="rf-fade" style="padding:12px 0 6px">
+  <h1 style="margin:0;font-size:1.85rem;font-weight:800;letter-spacing:-0.03em">
+    🗺️ <span style="background:linear-gradient(135deg,#f1f5f9 30%,#818cf8);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+    Tìm đường thông minh</span>
   </h1>
-  <p style="color:#64748b;font-size:0.87rem;margin:6px 0 0">
-    Thuật toán A* — Ngắn nhất hoặc Nhanh nhất dựa trên tốc độ giao thông thực tế
+  <p style="color:#64748b;font-size:0.83rem;margin:4px 0 0">
+    Thuật toán A* · Gõ tên đường hoặc click bản đồ · So sánh 2 tuyến
   </p>
 </div>
-<hr style="border-color:rgba(255,255,255,0.07);margin:10px 0 18px">
 """, unsafe_allow_html=True)
 
-# ── Controls ──────────────────────────────────────────────────────────────────
-c1, c2, c3, c4 = st.columns([3, 3, 2, 1])
+st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
 
-with c1:
-    st.markdown('<p style="font-size:0.78rem;color:#94a3b8;margin-bottom:4px">📍 Điểm xuất phát</p>',
-                unsafe_allow_html=True)
-    from_name = st.selectbox("Xuất phát", LOC_NAMES, index=5,
-                             label_visibility="collapsed", key="rf_from")
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  SEARCH PANEL — 2 hàng, 3 cột thẳng hàng                              ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+from_pos = st.session_state.rf_from_pos
+to_pos   = st.session_state.rf_to_pos
 
-with c2:
-    st.markdown('<p style="font-size:0.78rem;color:#94a3b8;margin-bottom:4px">🏁 Điểm đến</p>',
-                unsafe_allow_html=True)
-    to_name = st.selectbox("Đến", LOC_NAMES, index=7,
-                           label_visibility="collapsed", key="rf_to")
 
-with c3:
-    st.markdown('<p style="font-size:0.78rem;color:#94a3b8;margin-bottom:4px">⚙️ Chế độ tìm</p>',
+
+# ── Hàng 1: Text input ──────────────────────────────────────────────────────
+c_from, c_to, c_btn = st.columns([5, 5, 2])
+
+with c_from:
+    st.markdown('<p style="font-size:0.74rem;color:#4ade80;font-weight:700;'
+                'margin:0 0 4px;letter-spacing:0.04em">📍 ĐIỂM XUẤT PHÁT</p>',
                 unsafe_allow_html=True)
-    mode = st.selectbox(
-        "Chế độ", ["shortest", "fastest"],
-        format_func=lambda x: "📏 Ngắn nhất" if x == "shortest" else "⚡ Nhanh nhất",
-        label_visibility="collapsed", key="rf_mode",
+    from_input = st.text_input(
+        "from", label_visibility="collapsed",
+        placeholder="Gõ tên đường... (vd: le duan)",
+        key="rf_from_input",
     )
 
-with c4:
-    st.markdown('<p style="font-size:0.78rem;color:#94a3b8;margin-bottom:4px">&nbsp;</p>',
+with c_to:
+    st.markdown('<p style="font-size:0.74rem;color:#f87171;font-weight:700;'
+                'margin:0 0 4px;letter-spacing:0.04em">🏁 ĐIỂM ĐẾN</p>',
                 unsafe_allow_html=True)
-    search = st.button("🔍 Tìm", use_container_width=True, type="primary", key="rf_search")
+    to_input = st.text_input(
+        "to", label_visibility="collapsed",
+        placeholder="Gõ tên đường...",
+        key="rf_to_input",
+    )
 
-# ── Tìm đường khi bấm ────────────────────────────────────────────────────────
-if search:
-    if from_name == to_name:
-        st.warning("⚠️ Điểm xuất phát và điểm đến phải khác nhau.")
+with c_btn:
+    st.markdown('<p style="font-size:0.74rem;color:transparent;margin:0 0 4px">.</p>',
+                unsafe_allow_html=True)
+    find_disabled = from_pos is None or to_pos is None
+    find_clicked  = st.button("🔍 Tìm đường", use_container_width=True,
+                               type="primary", key="rf_find",
+                               disabled=find_disabled)
+
+# ── Hàng 2: Tọa độ + Reset ──────────────────────────────────────────────────
+d_from, d_to, d_rst = st.columns([5, 5, 2])
+
+with d_from:
+    if from_pos:
+        st.markdown(
+            f'<span class="coord-badge" style="background:rgba(74,222,128,0.12);'
+            f'color:#4ade80;border:1px solid rgba(74,222,128,0.3)">'
+            f'✅ {from_pos[0]:.5f}, {from_pos[1]:.5f}</span>',
+            unsafe_allow_html=True)
+        if st.button("✕ Xóa điểm đi", key="rf_clear_from", use_container_width=True):
+            st.session_state.rf_from_pos  = None
+            st.session_state.rf_res_short = None
+            st.session_state.rf_res_fast  = None
+            st.rerun()
     else:
-        from_lat, from_lng = LOCATIONS[from_name]
-        to_lat, to_lng     = LOCATIONS[to_name]
-        with st.spinner("⏳ Đang tính toán tuyến đường..."):
-            result = get_route_api(from_lat, from_lng, to_lat, to_lng, mode)
-        st.session_state["route_result"]   = result
-        st.session_state["route_from"]     = from_name
-        st.session_state["route_to"]       = to_name
-        st.session_state["route_from_pos"] = LOCATIONS[from_name]
-        st.session_state["route_to_pos"]   = LOCATIONS[to_name]
+        st.markdown(
+            '<span class="coord-badge" style="background:rgba(255,255,255,0.04);'
+            'color:#475569;border:1px solid rgba(255,255,255,0.08)">'
+            '⚪ Chưa chọn điểm xuất phát</span>',
+            unsafe_allow_html=True)
 
-# ── Hiển thị kết quả ─────────────────────────────────────────────────────────
-result   = st.session_state.get("route_result")
-from_pos = st.session_state.get("route_from_pos")
-to_pos   = st.session_state.get("route_to_pos")
-r_from   = st.session_state.get("route_from", "")
-r_to     = st.session_state.get("route_to",   "")
+with d_to:
+    if to_pos:
+        st.markdown(
+            f'<span class="coord-badge" style="background:rgba(248,113,113,0.12);'
+            f'color:#f87171;border:1px solid rgba(248,113,113,0.3)">'
+            f'✅ {to_pos[0]:.5f}, {to_pos[1]:.5f}</span>',
+            unsafe_allow_html=True)
+        if st.button("✕ Xóa điểm đến", key="rf_clear_to", use_container_width=True):
+            st.session_state.rf_to_pos    = None
+            st.session_state.rf_res_short = None
+            st.session_state.rf_res_fast  = None
+            st.rerun()
+    else:
+        st.markdown(
+            '<span class="coord-badge" style="background:rgba(255,255,255,0.04);'
+            'color:#475569;border:1px solid rgba(255,255,255,0.08)">'
+            '⚪ Chưa chọn điểm đến</span>',
+            unsafe_allow_html=True)
 
-if result and "error" not in result:
-    dist   = result.get("distance_km", 0)
-    dur    = result.get("duration_min", 0)
-    streets = result.get("streets", [])
-    path   = result.get("path", [])          # [[lng, lat], ...]
-    snapped_from = result.get("from", {}).get("snapped", [])
-    snapped_to   = result.get("to",   {}).get("snapped", [])
+with d_rst:
+    if st.button("🔄 Reset", use_container_width=True, key="rf_reset"):
+        for k in ("rf_from_pos","rf_to_pos","rf_last_click","rf_res_short","rf_res_fast"):
+            st.session_state[k] = None
+        st.rerun()
 
-    # ── Thẻ tóm tắt ──────────────────────────────────────────────────────
-    km_col, min_col, street_col = st.columns(3)
-    with km_col:
-        st.markdown(f"""
-        <div style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);
-                    border-radius:14px;padding:14px 18px;text-align:center">
-            <div style="font-size:1.6rem;font-weight:800;color:#818cf8">{dist:.1f}</div>
-            <div style="font-size:0.78rem;color:#64748b;margin-top:2px">km quãng đường</div>
-        </div>""", unsafe_allow_html=True)
-    with min_col:
-        st.markdown(f"""
-        <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);
-                    border-radius:14px;padding:14px 18px;text-align:center">
-            <div style="font-size:1.6rem;font-weight:800;color:#4ade80">{dur:.0f}</div>
-            <div style="font-size:0.78rem;color:#64748b;margin-top:2px">phút ước tính</div>
-        </div>""", unsafe_allow_html=True)
-    with street_col:
-        st.markdown(f"""
-        <div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2);
-                    border-radius:14px;padding:14px 18px;text-align:center">
-            <div style="font-size:1.6rem;font-weight:800;color:#fbbf24">{len(streets)}</div>
-            <div style="font-size:0.78rem;color:#64748b;margin-top:2px">đoạn đường đi qua</div>
-        </div>""", unsafe_allow_html=True)
 
-    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
-    # ── Bản đồ Leaflet ────────────────────────────────────────────────────
-    # Đảo path [lng, lat] → [lat, lng] cho Leaflet
-    latlng_path = [[pt[1], pt[0]] for pt in path]
-    path_js = json.dumps(latlng_path)
+st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
 
-    from_lat_snap = snapped_from[1] if len(snapped_from) == 2 else from_pos[0]
-    from_lng_snap = snapped_from[0] if len(snapped_from) == 2 else from_pos[1]
-    to_lat_snap   = snapped_to[1]   if len(snapped_to)   == 2 else to_pos[0]
-    to_lng_snap   = snapped_to[0]   if len(snapped_to)   == 2 else to_pos[1]
+# ── Xử lý text input → fuzzy match → pin ────────────────────────────────────
+def _apply_street(field: str, query: str):
+    """Tìm đường khớp với query và set pin nếu khớp đúng 1."""
+    matches = find_streets(query)
+    if len(matches) == 1:
+        name, pos = matches[0]
+        st.session_state[field] = pos
+        st.session_state.rf_res_short = None
+        st.session_state.rf_res_fast  = None
+        st.rerun()
+    elif len(matches) > 1:
+        # Hiện gợi ý nếu nhiều kết quả
+        st.session_state[f"_suggestions_{field}"] = matches
+    else:
+        st.session_state[f"_suggestions_{field}"] = []
 
-    center_lat = (from_lat_snap + to_lat_snap) / 2
-    center_lng = (from_lng_snap + to_lng_snap) / 2
+if from_input and from_input.strip() and from_pos is None:
+    _apply_street("rf_from_pos", from_input)
 
-    map_html = f"""
-<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-  body{{margin:0;padding:0;background:#0f172a}}
-  #map{{width:100%;height:480px;border-radius:16px;overflow:hidden}}
-</style>
-</head>
-<body>
-<div id="map"></div>
-<script>
-  var map = L.map('map', {{zoomControl:true}}).setView([{center_lat},{center_lng}], 14);
+if to_input and to_input.strip() and to_pos is None:
+    _apply_street("rf_to_pos", to_input)
 
-  L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png',{{
-    attribution:'&copy; OpenStreetMap | CartoDB',
-    subdomains:'abcd', maxZoom:19
-  }}).addTo(map);
+# Gợi ý khi có nhiều kết quả
+for field, label, color in [
+    ("rf_from_pos", "điểm xuất phát", "#4ade80"),
+    ("rf_to_pos",   "điểm đến",       "#f87171"),
+]:
+    key = f"_suggestions_{field}"
+    suggestions = st.session_state.get(key, [])
+    if suggestions:
+        st.markdown(f'<p style="font-size:0.78rem;color:{color};margin:0 0 4px">'
+                    f'Chọn {label}:</p>', unsafe_allow_html=True)
+        cols = st.columns(min(len(suggestions), 4))
+        for i, (name, pos) in enumerate(suggestions[:4]):
+            if cols[i].button(name, key=f"sug_{field}_{i}"):
+                st.session_state[field]     = pos
+                st.session_state.rf_res_short = None
+                st.session_state.rf_res_fast  = None
+                st.session_state[key] = []
+                st.rerun()
 
-  // Vẽ route polyline
-  var path = {path_js};
-  var poly = L.polyline(path, {{
-    color: '#818cf8',
-    weight: 5,
-    opacity: 0.9,
-    lineJoin: 'round',
-    lineCap: 'round',
-  }}).addTo(map);
+# ── Tìm đường khi bấm nút ────────────────────────────────────────────────────
+if find_clicked and from_pos and to_pos:
+    with st.spinner("⏳ Thuật toán A* đang tính..."):
+        st.session_state.rf_res_short = get_route_api(*from_pos, *to_pos, "shortest")
+        st.session_state.rf_res_fast  = get_route_api(*from_pos, *to_pos, "fastest")
+    st.rerun()
 
-  // Fit bounds
-  map.fitBounds(poly.getBounds(), {{padding:[32,32]}});
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  BẢN ĐỒ FOLIUM — full width, click-to-pin                             ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+from_pos = st.session_state.rf_from_pos
+to_pos   = st.session_state.rf_to_pos
+res_s    = st.session_state.rf_res_short
+res_f    = st.session_state.rf_res_fast
 
-  // Marker xuất phát (xanh)
-  var startIcon = L.divIcon({{
-    html: '<div style="background:#4ade80;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 10px #4ade8080"></div>',
-    iconSize:[16,16], iconAnchor:[8,8], className:''
-  }});
-  L.marker([{from_lat_snap},{from_lng_snap}], {{icon:startIcon}})
-    .addTo(map)
-    .bindPopup('<b style="color:#111">🟢 Xuất phát</b><br>{r_from}');
-
-  // Marker đích (đỏ)
-  var endIcon = L.divIcon({{
-    html: '<div style="background:#f87171;width:16px;height:16px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 10px #f8717180"></div>',
-    iconSize:[16,16], iconAnchor:[8,8], className:''
-  }});
-  L.marker([{to_lat_snap},{to_lng_snap}], {{icon:endIcon}})
-    .addTo(map)
-    .bindPopup('<b style="color:#111">🔴 Điểm đến</b><br>{r_to}');
-
-</script>
-</body></html>
-"""
-    components.html(map_html, height=496)
-
-    # ── Danh sách đường đi qua ────────────────────────────────────────────
-    if streets:
-        clean_streets = [s for s in streets if s and s != "[intersection]"]
-        if clean_streets:
-            st.markdown("""
-            <div style="margin-top:12px">
-              <p style="font-size:0.78rem;color:#64748b;font-weight:700;
-                        letter-spacing:0.07em;text-transform:uppercase;margin-bottom:8px">
-                📍 Tuyến đường đi qua
-              </p>
-            </div>""", unsafe_allow_html=True)
-            cols = st.columns(min(len(clean_streets), 4))
-            for i, s in enumerate(clean_streets):
-                with cols[i % len(cols)]:
-                    st.markdown(
-                        f'<span style="background:rgba(255,255,255,0.05);'
-                        f'border:1px solid rgba(255,255,255,0.08);border-radius:8px;'
-                        f'padding:4px 10px;font-size:0.8rem;color:#cbd5e1;'
-                        f'display:inline-block;margin:2px 0">{s}</span>',
-                        unsafe_allow_html=True,
-                    )
-
-elif result and "error" in result:
-    st.error(f"❌ {result['error']}")
-
+# Smart center/zoom
+if from_pos and to_pos:
+    center = [(from_pos[0]+to_pos[0])/2, (from_pos[1]+to_pos[1])/2]
+    span   = max(abs(from_pos[0]-to_pos[0]), abs(from_pos[1]-to_pos[1]))
+    zoom   = 14 if span < 0.02 else 13 if span < 0.05 else 12
+elif from_pos:
+    center, zoom = list(from_pos), 15
 else:
-    # Trạng thái chờ — bản đồ mặc định Đà Nẵng
-    default_map = f"""
-<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>
-  body{{margin:0;background:#0f172a}}
-  #map{{width:100%;height:420px;border-radius:16px;overflow:hidden}}
-</style>
-</head>
-<body>
-<div id="map"></div>
-<script>
-  var map = L.map('map').setView([{MAP_CENTER[0]},{MAP_CENTER[1]}], 13);
-  L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png',{{
-    attribution:'&copy; OpenStreetMap | CartoDB',
-    subdomains:'abcd', maxZoom:19
-  }}).addTo(map);
+    center, zoom = MAP_CENTER, MAP_ZOOM
 
-  // Hiện markers tất cả địa điểm
-  var locs = {json.dumps({k: list(v) for k, v in LOCATIONS.items()}, ensure_ascii=False)};
-  for(var name in locs) {{
-    var pos = locs[name];
-    var icon = L.divIcon({{
-      html: '<div style="background:#818cf8;width:10px;height:10px;border-radius:50%;border:2px solid #fff;opacity:0.8"></div>',
-      iconSize:[10,10], iconAnchor:[5,5], className:''
-    }});
-    L.marker(pos, {{icon:icon}}).addTo(map).bindPopup(name);
-  }}
-</script>
-</body></html>
-"""
-    components.html(default_map, height=436)
-    st.markdown("""
-    <div style="text-align:center;color:#475569;font-size:0.84rem;padding:8px 0">
-        ☝️ Chọn điểm xuất phát, điểm đến và bấm <b style="color:#818cf8">🔍 Tìm</b> để hiện tuyến đường
-    </div>
-    """, unsafe_allow_html=True)
+m = folium.Map(location=center, zoom_start=zoom,
+               tiles="CartoDB dark_matter", prefer_canvas=True, attr="© CartoDB")
+
+# Vẽ route
+sel = st.session_state.rf_selected
+rd  = res_s if sel == "shortest" else res_f
+if rd and "path" in rd and not rd.get("error"):
+    clr = "#818cf8" if sel == "shortest" else "#4ade80"
+    folium.PolyLine([[p[1],p[0]] for p in rd["path"]],
+                    color=clr, weight=5, opacity=0.92).add_to(m)
+
+# Markers
+if from_pos:
+    folium.Marker(list(from_pos), tooltip="📍 Điểm xuất phát",
+        icon=folium.DivIcon(
+            html='<div style="background:#4ade80;width:16px;height:16px;border-radius:50%;'
+                 'border:3px solid #fff;box-shadow:0 0 12px rgba(74,222,128,.7)"></div>',
+            icon_size=(16,16), icon_anchor=(8,8))).add_to(m)
+if to_pos:
+    folium.Marker(list(to_pos), tooltip="🏁 Điểm đến",
+        icon=folium.DivIcon(
+            html='<div style="background:#f87171;width:16px;height:16px;border-radius:50%;'
+                 'border:3px solid #fff;box-shadow:0 0 12px rgba(248,113,113,.7)"></div>',
+            icon_size=(16,16), icon_anchor=(8,8))).add_to(m)
+
+map_data = st_folium(m, height=460, use_container_width=True,
+                     returned_objects=["last_clicked"], key="rf_map")
+
+# Xử lý click map
+if map_data and map_data.get("last_clicked"):
+    c = map_data["last_clicked"]
+    nc = (round(c["lat"],6), round(c["lng"],6))
+    if nc != st.session_state.rf_last_click:
+        st.session_state.rf_last_click = nc
+        if st.session_state.rf_from_pos is None:
+            st.session_state.rf_from_pos = nc
+        elif st.session_state.rf_to_pos is None:
+            st.session_state.rf_to_pos = nc
+        else:
+            st.session_state.rf_from_pos  = nc
+            st.session_state.rf_to_pos    = None
+            st.session_state.rf_res_short = None
+            st.session_state.rf_res_fast  = None
+        st.rerun()
+
+# Hint text
+if from_pos is None:
+    hint = "☝️ Gõ tên đường hoặc click bản đồ để chọn điểm xuất phát"
+elif to_pos is None:
+    hint = "☝️ Chọn tiếp điểm đến rồi bấm <b>🔍 Tìm đường</b>"
+elif res_s is None:
+    hint = "✅ Đã chọn 2 điểm — bấm <b>🔍 Tìm đường</b>"
+else:
+    hint = "🗺️ Tím = Ngắn nhất · Xanh = Nhanh nhất · Click bản đồ để reset"
+st.markdown(f'<p style="font-size:0.75rem;color:#475569;text-align:center;'
+            f'padding:4px 0">{hint}</p>', unsafe_allow_html=True)
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  KẾT QUẢ SO SÁNH                                                       ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+if res_s and res_f:
+    if res_s.get("error") or res_f.get("error"):
+        st.error(f"❌ {res_s.get('error') or res_f.get('error')}")
+    else:
+        st.markdown("<hr style='border-color:rgba(255,255,255,0.06);margin:14px 0'>",
+                    unsafe_allow_html=True)
+        st.markdown("### 📊 So sánh 2 Tuyến đường")
+
+        dist_s,dur_s = res_s.get("distance_km",0), res_s.get("duration_min",0)
+        dist_f,dur_f = res_f.get("distance_km",0), res_f.get("duration_min",0)
+        best = "fastest" if dur_f <= dur_s else "shortest"
+
+        c1, c2 = st.columns(2)
+        for col,mode,icon,title,dist,dur,ns in [
+            (c1,"shortest","📏","Ngắn nhất",dist_s,dur_s,len(res_s.get("streets",[]))),
+            (c2,"fastest", "⚡","Nhanh nhất",dist_f,dur_f,len(res_f.get("streets",[]))),
+        ]:
+            is_best = mode == best
+            badge = ('<span style="background:rgba(99,102,241,.15);color:#818cf8;'
+                     'border:1px solid rgba(99,102,241,.3);border-radius:20px;'
+                     'padding:2px 10px;font-size:0.7rem;font-weight:700">⭐ Khuyến nghị</span>'
+                     if is_best else "")
+            cls = "route-card best" if is_best else "route-card"
+            col.markdown(f"""
+            <div class="{cls} rf-fade">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+                <span style="font-size:1.25rem">{icon}</span>
+                <div>
+                  <div style="font-size:0.92rem;font-weight:700;color:#e2e8f0">{title}</div>
+                  {badge}
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <div style="text-align:center;background:rgba(255,255,255,.04);
+                            border-radius:10px;padding:10px">
+                  <div style="font-size:1.3rem;font-weight:800;color:#818cf8">{dist:.1f}</div>
+                  <div style="font-size:0.7rem;color:#64748b">km</div>
+                </div>
+                <div style="text-align:center;background:rgba(255,255,255,.04);
+                            border-radius:10px;padding:10px">
+                  <div style="font-size:1.3rem;font-weight:800;color:#4ade80">{dur:.0f}</div>
+                  <div style="font-size:0.7rem;color:#64748b">phút</div>
+                </div>
+              </div>
+              <div style="text-align:center;margin-top:6px;font-size:0.71rem;color:#475569">
+                {ns} đoạn đường đi qua
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        st.radio("Xem trên bản đồ:", ["shortest","fastest"],
+                 format_func=lambda x:"📏 Ngắn nhất" if x=="shortest" else "⚡ Nhanh nhất",
+                 horizontal=True, key="rf_selected")
+
+        # Danh sách đường + traffic
+        active = res_s if st.session_state.rf_selected == "shortest" else res_f
+        streets = [s for s in active.get("streets",[]) if s and s!="[intersection]"]
+        if streets:
+            st.markdown('<p style="font-size:0.76rem;color:#64748b;font-weight:700;'
+                        'letter-spacing:.07em;text-transform:uppercase;margin:14px 0 8px">'
+                        '📍 Đường đi qua & Trạng thái giao thông</p>',
+                        unsafe_allow_html=True)
+            traffic = get_traffic_current()
+            tmap = {s.get("street_name",""): s for s in traffic.get("streets",[])
+                    if s.get("street_name")}
+            n = 3
+            for row in [streets[i:i+n] for i in range(0,len(streets),n)]:
+                cols = st.columns(n)
+                for col,s in zip(cols,row):
+                    td  = tmap.get(s,{})
+                    lv  = td.get("congestion_level")
+                    spd = td.get("avg_speed")
+                    if lv is not None and spd is not None:
+                        th = (f'<span style="color:{_CLR[lv]};font-size:.69rem;font-weight:600">'
+                              f'● {_LBL[lv]} · {spd} km/h</span>')
+                    else:
+                        th = '<span style="color:#334155;font-size:.69rem">— Không có data</span>'
+                    col.markdown(
+                        f'<div style="background:rgba(255,255,255,.03);border:1px solid '
+                        f'rgba(255,255,255,.07);border-radius:8px;padding:6px 10px;margin:2px 0">'
+                        f'<div style="font-size:.78rem;color:#cbd5e1;font-weight:500;'
+                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{s}</div>'
+                        f'{th}</div>',
+                        unsafe_allow_html=True)

@@ -167,6 +167,17 @@ def render_sidebar(
             st.page_link("pages/4_login.py",    label="Đăng nhập",         use_container_width=True)
         else:
             st.page_link("pages/2_dashboard.py", label="Dashboard",        use_container_width=True)
+
+            # CSGT & Admin: trang điều hành giao thông
+            if user_role in ("admin", "csgt"):
+                st.markdown("""
+                <div style="font-size:0.72rem;color:#475569;font-weight:700;
+                            letter-spacing:0.08em;padding:10px 4px 4px;
+                            text-transform:uppercase">🚔 Điều hành CSGT</div>
+                """, unsafe_allow_html=True)
+                st.page_link("pages/7_csgt_dashboard.py", label="Dashboard CSGT",   use_container_width=True)
+                st.page_link("pages/8_incidents.py",       label="Quản lý Sự cố",   use_container_width=True)
+
             if user_role == "admin":
                 st.markdown("""
                 <div style="font-size:0.72rem;color:#475569;font-weight:700;
