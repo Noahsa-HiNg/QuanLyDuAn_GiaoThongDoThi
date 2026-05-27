@@ -84,12 +84,41 @@ def run_all():
     res, data = test_endpoint("Route Finding (invalid points)", "/api/route?start_lat=0&start_lon=0&end_lat=1&end_lon=1", [400, 404, 500])
     results.append(res)
 
+    # --- PHÂN HỆ THỐNG KÊ (STATS ENDPOINTS) ---
+    res, _ = test_endpoint("Stats Top Congested", "/api/stats/top-congested?limit=5")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Congested Ranking (1d)", "/api/stats/congested-ranking?period=1d&limit=5")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Congested Ranking (1w)", "/api/stats/congested-ranking?period=1w&limit=5")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Congested Ranking (1m)", "/api/stats/congested-ranking?period=1m&limit=5")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Congested by District (realtime)", "/api/stats/congested-by-district?period=realtime")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Congested by District (1w)", "/api/stats/congested-by-district?period=1w")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Hourly Trend", "/api/stats/hourly-trend")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Incidents Summary", "/api/stats/incidents")
+    results.append(res)
+
+    res, _ = test_endpoint("Stats Feedback Summary", "/api/stats/feedback-summary")
+    results.append(res)
+
     if all(results):
-        print("\n✅ All basic endpoint tests passed!")
+        print("\n✅ All basic and statistics endpoint tests passed successfully!")
         sys.exit(0)
     else:
         print("\n❌ Some tests failed.")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     run_all()

@@ -84,6 +84,9 @@ class TrafficData(Base):
         # Index composite: (street_id, segment_idx, timestamp)
         # Tối ưu query "latest traffic của mỗi đoạn đường"
         Index("idx_traffic_street_seg_time", "street_id", "segment_idx", "timestamp"),
+
+        # Chỉ mục mới giúp tăng tốc độ tìm kiếm/thống kê theo khoảng thời gian
+        Index("idx_traffic_data_timestamp", "timestamp"),
     )
 
     # ─── RELATIONSHIPS ────────────────────────────────────────

@@ -29,6 +29,7 @@ from routers import users
 from routers import predict
 from routers import route
 from routers import stats
+from routers import incidents
 log = logging.getLogger("main")
 
 
@@ -83,15 +84,12 @@ app.include_router(traffic.router,  prefix="/api", tags=["Traffic"])
 app.include_router(auth.router,     prefix="/api", tags=["Auth"])
 app.include_router(users.router,    prefix="/api", tags=["Users"])
 app.include_router(predict.router,  prefix="/api", tags=["Predict"])
-app.include_router(route.router,    prefix="/api", tags=["Route"])
-app.include_router(stats.router,    prefix="/api", tags=["Stats"])
+app.include_router(route.router,     prefix="/api", tags=["Route"])
+app.include_router(stats.router,     prefix="/api", tags=["Stats"])
+app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
 # TODO: Thêm router theo từng sprint
-# app.include_router(predict.router,   prefix="/api", tags=["Predict"])
-# app.include_router(route.router,     prefix="/api", tags=["Route"])
-# app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
-# app.include_router(feedback.router,  prefix="/api", tags=["Feedback"])
-# app.include_router(auth.router,      prefix="/api", tags=["Auth"])
-# app.include_router(admin.router,     prefix="/api", tags=["Admin"])
+# app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
+# app.include_router(admin.router,    prefix="/api", tags=["Admin"])
 
 
 # ─────────────────────────────────────────────────────────────

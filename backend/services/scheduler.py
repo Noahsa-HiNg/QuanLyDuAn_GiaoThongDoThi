@@ -60,7 +60,7 @@ def _job_crawl_all(job_id: str, with_weather: bool = True):
     try:
         result = run_crawl_cycle(
             db,
-            retention_days = 30,         # xóa data cũ hơn 30 ngày
+            retention_days = 0,          # không tự động xóa dữ liệu (xóa thủ công)
             with_weather   = with_weather,  # True = lưu WeatherSnapshot
         )
         log.info(
