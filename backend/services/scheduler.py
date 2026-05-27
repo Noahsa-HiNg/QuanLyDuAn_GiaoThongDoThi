@@ -6,12 +6,8 @@ Quản lý lịch cào dữ liệu traffic tự động bằng APScheduler 3.x.
 ─────────────────────────────────────────────────────────────
   JOBS MẶC ĐỊNH (tự động chạy khi server khởi động):
 
-  1. crawl_peak_morning   — Cào toàn bộ đường, mỗi 10 phút
-                            từ 06:30 đến 08:30 (giờ cao điểm sáng)
-  2. crawl_peak_evening   — Cào toàn bộ đường, mỗi 10 phút
-                            từ 16:30 đến 19:00 (giờ cao điểm chiều)
-  3. crawl_offpeak        — Cào toàn bộ đường, mỗi 30 phút
-                            từ 08:30 đến 16:30 và 19:00 đến 22:00
+  1. crawl_traffic_5m     — Cào toàn bộ đường định kỳ mỗi 5 phút
+  2. auto_retrain         — Tự động huấn luyện lại model lúc 02:00 hàng ngày
 
   API quản lý (xem routers/traffic.py):
     GET  /api/traffic/schedule/jobs        Danh sách tất cả job
@@ -89,68 +85,21 @@ def _make_job_func(job_id: str, with_weather: bool = True):
 
 def _register_default_jobs():
     """
-    Đăng ký 3 job mặc định theo lịch giờ Đà Nẵng (UTC+7).
-
-    Chiến lược adaptive interval:
-      - Giờ cao điểm sáng  (06:30–08:30): mỗi 10 phút
-      - Giờ bình thường    (08:30–16:30): mỗi 30 phút
-      - Giờ cao điểm chiều (16:30–19:00): mỗi 10 phút
-      - Giờ tối            (19:00–22:00): mỗi 30 phút
-      - Ban đêm            (22:00–06:30): không cào
+    Đăng ký job mặc định cào dữ liệu định kỳ mỗi 5 phút (UTC+7).
     """
     _scheduler.add_job(
-        func     = _make_job_func("crawl_peak_morning"),
+        func     = _make_job_func("crawl_traffic_5m", with_weather=True),
         trigger  = CronTrigger(
-            hour   = "6-8",
-            minute = "*/10",      # mỗi 10 phút trong khoảng 06:00–08:59
+            minute = "*/5",       # mỗi 5 phút
             second = "0",
             timezone="Asia/Ho_Chi_Minh",
         ),
-        id       = "crawl_peak_morning",
-        name     = "🌅 Cào giờ cao điểm sáng (06:00–09:00, mỗi 10p)",
+        id       = "crawl_traffic_5m",
+        name     = "🔄 Cào dữ liệu traffic định kỳ (Mỗi 5 phút)",
         replace_existing=True,
     )
 
-    _scheduler.add_job(
-        func     = _make_job_func("crawl_offpeak_day"),
-        trigger  = CronTrigger(
-            hour   = "9-16",
-            minute = "*/30",      # mỗi 30 phút ban ngày
-            second = "0",
-            timezone="Asia/Ho_Chi_Minh",
-        ),
-        id       = "crawl_offpeak_day",
-        name     = "☀️ Cào ban ngày bình thường (09:00–17:00, mỗi 30p)",
-        replace_existing=True,
-    )
-
-    _scheduler.add_job(
-        func     = _make_job_func("crawl_peak_evening"),
-        trigger  = CronTrigger(
-            hour   = "17-19",
-            minute = "*/10",      # mỗi 10 phút giờ cao điểm chiều
-            second = "0",
-            timezone="Asia/Ho_Chi_Minh",
-        ),
-        id       = "crawl_peak_evening",
-        name     = "🌆 Cào giờ cao điểm chiều (17:00–20:00, mỗi 10p)",
-        replace_existing=True,
-    )
-
-    _scheduler.add_job(
-        func     = _make_job_func("crawl_offpeak_evening"),
-        trigger  = CronTrigger(
-            hour   = "20-21",
-            minute = "*/30",      # mỗi 30 phút buổi tối
-            second = "0",
-            timezone="Asia/Ho_Chi_Minh",
-        ),
-        id       = "crawl_offpeak_evening",
-        name     = "🌙 Cào buổi tối (20:00–22:00, mỗi 30p)",
-        replace_existing=True,
-    )
-
-    log.info("📅 [APScheduler] Đã đăng ký 4 job cào mặc định")
+    log.info("📅 [APScheduler] Đã đăng ký job cào định kỳ mỗi 5 phút")
 
     # ─── JOB RETRAIN (Task #29) ──────────────────────────────────────────────
 

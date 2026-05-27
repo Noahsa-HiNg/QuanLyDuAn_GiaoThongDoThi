@@ -678,10 +678,8 @@ def resume_schedule(
 Kích hoạt 1 job chạy ngay lập tức mà không phá vỡ lịch định kỳ của nó.
 
 **Job ID mặc định:**
-- `crawl_peak_morning`   — 🌅 Giờ cao điểm sáng
-- `crawl_offpeak_day`    — ☀️ Ban ngày bình thường
-- `crawl_peak_evening`   — 🌆 Giờ cao điểm chiều
-- `crawl_offpeak_evening`— 🌙 Buổi tối
+- `crawl_traffic_5m`     — 🔄 Cào định kỳ 5 phút
+- `auto_retrain`         — 🤖 Huấn luyện lại model
 """,
 )
 def run_job_now(

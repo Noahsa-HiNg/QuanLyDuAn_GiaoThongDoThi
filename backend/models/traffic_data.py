@@ -53,6 +53,9 @@ class TrafficData(Base):
     # CheckConstraint: tự động kiểm tra avg_speed >= 0 ở tầng DB
     avg_speed = Column(Float, nullable=True)
 
+    # Tốc độ tự do / tốc độ thiết kế của đoạn đường (km/h) - lấy từ API
+    free_flow_speed = Column(Float, nullable=True)
+
     # Mức độ ùn tắc:
     #   0 = Xanh  (thông thoáng): avg_speed >= 70% max_speed
     #   1 = Vàng  (chậm)        : avg_speed 40-70% max_speed

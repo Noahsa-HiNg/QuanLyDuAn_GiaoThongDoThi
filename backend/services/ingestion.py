@@ -462,6 +462,7 @@ def ingest_street(street: Street, db: Session) -> bool:
             segment_idx      = seg_idx,
             timestamp        = now,
             avg_speed        = avg_speed,
+            free_flow_speed  = result.get("free_flow_speed"),
             congestion_level = congestion,
             source           = source,
         )
@@ -578,51 +579,17 @@ def run_crawl_cycle(
         except Exception as e:
             log.warning(f"⚠ Không lấy được thời tiết: {e} — tiếp tục cào traffic")
 
-    # ── Lấy danh sách đường ───────────────────────────────────────────────
-    streets = db.query(Street).all()
-    if not streets:
-        return _make_error_result(
-            started_at, "Không có đường nào trong DB — chạy sync_streets.py trước"
-        )
-
-    log.info(
-        f"🌐 Bắt đầu cào {len(streets)} đường lúc "
-        f"{started_at.strftime('%H:%M:%S %d/%m/%Y +07')} | "
-        f"Quota TomTom: {tomtom_quota.remaining} req"
-    )
-
-    success_cnt = 0
-    for street in streets:
-        ok = ingest_street(street, db)
-        if ok:
-            success_cnt += 1
-        else:
-            errors.append(street.name)
-        time.sleep(1.0)   # Delay nhẹ giữa 2 đường
-
-    # ── Commit + invalidate cache ─────────────────────────────────────────
+    # ── FETCH & SAVE TRAFFIC DATA VỚI HERE API ──────────────────────────────
     try:
-        db.commit()
+        from services.here_ingestion_helper import run_here_crawl
+        result = run_here_crawl(db, started_at)
+        if "error" in result:
+            return _make_error_result(started_at, result["error"])
+            
+        cache_svc.invalidate_traffic()
+        log.info("🗑  Cache Redis đã xóa — lần gọi tiếp theo đọc từ DB")
+        log.info(f"✅ Hoàn tất HERE Bbox Crawl: {result['streets_success']}/{result['streets_total']} segments map được — {result['duration_seconds']}s")
+        return result
     except Exception as e:
-        db.rollback()
-        log.error(f"❌ Lỗi commit DB: {e}")
-        raise
-
-    cache_svc.invalidate_traffic()
-    log.info("🗑  Cache Redis đã xóa — lần gọi tiếp theo đọc từ DB")
-
-    duration = round(_time.time() - t0, 2)
-    log.info(
-        f"✅ Hoàn tất — {success_cnt}/{len(streets)} đường | "
-        f"{duration}s | Quota còn: {tomtom_quota.remaining}"
-    )
-
-    return {
-        "streets_total"   : len(streets),
-        "streets_success" : success_cnt,
-        "records_saved"   : success_cnt,
-        "quota_remaining" : tomtom_quota.remaining,
-        "duration_seconds": duration,
-        "timestamp"       : started_at.strftime("%H:%M:%S %d/%m/%Y +07"),
-        "errors"          : errors,
-    }
+        log.error(f"Lỗi cào dữ liệu HERE API: {e}", exc_info=True)
+        return _make_error_result(started_at, f"System Error: {str(e)}")

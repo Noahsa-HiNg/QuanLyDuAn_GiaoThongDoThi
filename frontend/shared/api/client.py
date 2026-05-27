@@ -41,7 +41,8 @@ def get_traffic_current(district_id: int | None = None) -> dict:
         )
         resp.raise_for_status()
         return _json_utf8(resp)
-    except Exception:
+    except Exception as e:
+        print(f"ERROR calling get_traffic_current: {e}")
         return get_mock_traffic(district_id)
 
 

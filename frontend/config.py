@@ -35,4 +35,4 @@ TRAFFIC_CACHE_TTL = 55    # giây — dưới refresh interval
 STREETS_CACHE_TTL = 300   # 5 phút — geometry ít thay đổi
 
 # ── HTTP ──────────────────────────────────────────────────────────────
-REQUEST_TIMEOUT = 10.0    # giây
+REQUEST_TIMEOUT = 30.0    # giây
