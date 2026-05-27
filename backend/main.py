@@ -41,15 +41,28 @@ async def lifespan(app: FastAPI):
     """
     Lifecycle hook của FastAPI (thay thế @app.on_event deprecated).
 
-    Startup : khởi động APScheduler với lịch cào mặc định.
-    Shutdown: dừng APScheduler sạch sẽ, không chờ job đang chạy.
+    Startup : Khởi động APScheduler nếu ENABLE_CRAWL=true (mặc định).
+    Shutdown: Dừng APScheduler sạch sẽ, không chờ job đang chạy.
+
+    Để TẪT cào (đồng đội không muốn cào):
+        Thêm vào .env:  ENABLE_CRAWL=false
     """
+    import os
     from services.scheduler import start_scheduler, stop_scheduler
-    log.info("🚀 Server khởi động — bật APScheduler...")
-    start_scheduler()
-    yield                       # ← Server đang chạy
-    log.info("🛑 Server tắt — dừng APScheduler...")
-    stop_scheduler()
+
+    enable_crawl = os.getenv("ENABLE_CRAWL", "true").strip().lower()
+
+    if enable_crawl == "true":
+        log.info("🚀 Server khởi động — bật APScheduler (ENABLE_CRAWL=true)...")
+        start_scheduler()
+    else:
+        log.warning("⚠️  Cào dữ liệu đã TẪT (ENABLE_CRAWL=false) — server chạy bình thường nhưng không tự động cào")
+
+    yield  # ← Server đang chạy
+
+    if enable_crawl == "true":
+        log.info("🛑 Server tắt — dừng APScheduler...")
+        stop_scheduler()
 
 
 # ─────────────────────────────────────────────────────────────

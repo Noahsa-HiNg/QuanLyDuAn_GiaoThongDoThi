@@ -24,6 +24,20 @@ DISTRICT_BBOXES = {
     "Hòa Vang"    : {"bbox": "107.90,15.85,108.20,16.08"},
 }
 
+def _normalize_speed(freeflow_kmh: float) -> int:
+    """
+    Chuẩn hóa tốc độ freeflow (km/h) về mức giới hạn gần nhất theo
+    quy định ATGT Việt Nam: 20, 30, 40, 50, 60, 70, 80, 90, 100, 120.
+
+    Ví dụ:  43 km/h → 40,  58 km/h → 60,  82 km/h → 80
+    """
+    thresholds = [20, 30, 40, 50, 60, 70, 80, 90, 100, 120]
+    for t in thresholds:
+        if freeflow_kmh <= t + 8:   # ngưỡng ±8 km/h
+            return t
+    return 120
+
+
 def fetch_here_district(district: str, bbox: str, api_key: str) -> list:
     try:
         resp = requests.get(
@@ -92,6 +106,7 @@ def run_here_crawl(db: Session, started_at: datetime):
     distances, indices = tree.query(osm_pts, k=1)
 
     records_to_insert = []
+    streets_to_update_speed = []  # (street_id, new_max_speed)
     success_cnt = 0
     now = datetime.now(TZ_DANANG)
 
@@ -101,7 +116,18 @@ def run_here_crawl(db: Session, started_at: datetime):
             hs = here_segments[indices[i]]
             speed = hs["speed_kmh"]
             freeflow = hs.get("freeflow_kmh")
-            # Dùng freeflow làm tốc độ giới hạn mặc định nếu max_speed rỗng
+
+            # ── Tự động cập nhật max_speed từ freeflow HERE ────────────────
+            # Chỉ cập nhật nếu freeflow hợp lệ (15–120 km/h)
+            # và chênh lệch đáng kể so với max_speed hiện tại (> 15 km/h)
+            if freeflow and 15 <= freeflow <= 120:
+                # Chuẩn hóa về bội số gần nhất của 10
+                normalized = _normalize_speed(freeflow)
+                current_max = row.max_speed or 0
+                if current_max == 0 or abs(current_max - normalized) > 15:
+                    streets_to_update_speed.append((row.id, normalized))
+
+            # ── Tính congestion dùng max_speed đã cập nhật (hoặc freeflow) ─
             max_spd = row.max_speed or freeflow or 50
             ratio = speed / max_spd if max_spd > 0 else 0
             if ratio >= 0.70: cong = 0
@@ -119,9 +145,27 @@ def run_here_crawl(db: Session, started_at: datetime):
             ))
             success_cnt += 1
 
+    # ── Cập nhật max_speed hàng loạt cho các đường cần điều chỉnh ─────────
+    if streets_to_update_speed:
+        for sid, new_speed in streets_to_update_speed:
+            db.execute(
+                text("UPDATE streets SET max_speed = :spd WHERE id = :sid"),
+                {"spd": new_speed, "sid": sid}
+            )
+        print(f"[HERE] Đã cập nhật max_speed cho {len(streets_to_update_speed)} đường từ freeflow HERE")
+
     if records_to_insert:
         db.bulk_save_objects(records_to_insert)
         db.commit()
+
+        # ── Refresh Materialized View sau khi commit ────────────────────────
+        # CONCURRENTLY: không lock bảng → người dùng vẫn đọc được trong lúc refresh
+        try:
+            db.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY latest_traffic"))
+            db.commit()
+            print("[HERE] Đã refresh Materialized View latest_traffic")
+        except Exception as e:
+            print(f"[HERE] Cảnh báo: Không refresh được MV: {e}")
 
     return {
         "streets_total": len(osm_query),

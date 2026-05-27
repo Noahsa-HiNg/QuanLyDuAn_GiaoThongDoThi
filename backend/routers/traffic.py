@@ -22,6 +22,7 @@ import json
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
@@ -192,7 +193,6 @@ def _build_traffic_out(
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get(
     "/traffic/current",
-    response_model=TrafficSummaryOut,
     summary="Tình trạng giao thông hiện tại toàn thành phố",
     description="""
 Trả về tình trạng giao thông **mới nhất** của tất cả tuyến đường.
@@ -208,106 +208,186 @@ Mỗi đường chỉ lấy **1 bản ghi mới nhất** từ bảng `traffic_da
 - `2` 🔴 Kẹt xe        — avg_speed < 40% max_speed
 - `null` — Chưa có dữ liệu
 """,
+    response_class=JSONResponse,
 )
 def get_traffic_current(
     district_id: Optional[int] = Query(None, description="Lọc theo ID quận"),
     db: Session = Depends(get_db),
 ):
-    # ── Kiểm tra Redis cache (chỉ cache khi không filter district) ────────────
-    # Lý do không cache khi filter: mỗi district cho kết quả khác nhau
-    # → cần nhiều key cache → phức tạp không cần thiết
+    # ── Kiểm tra Redis cache ───────────────────────────────────────────────────
     use_cache = (district_id is None)
     if use_cache:
-        cached = cache_svc.get_traffic()
-        if cached is not None:
-            return cached   # ✅ Cache HIT — trả về ngay, không query DB
+        raw = cache_svc.get_traffic_raw()   # Lấy raw JSON string (không parse)
+        if raw is not None:
+            return Response(                 # ✅ Cache HIT — trả thẳng bytes, không parse
+                content=raw,
+                media_type="application/json"
+            )
 
-    # ── Cache MISS → query DB bình thường ────────────────────────────────────
-    street_query = db.query(Street).options(joinedload(Street.district))
+    # ── Cache MISS → query DB dùng Materialized View ──────────────────────────
+    # 1 query JOIN: streets + districts + latest_traffic + geometry (~185ms)
+    district_filter = ""
+    params: dict = {}
     if district_id is not None:
-        street_query = street_query.filter(Street.district_id == district_id)
-    streets = street_query.order_by(Street.name).all()
+        district_filter = "AND s.district_id = :district_id"
+        params["district_id"] = district_id
 
-    if not streets:
+    rows = db.execute(text(f"""
+        SELECT
+            s.id                                        AS street_id,
+            s.name                                      AS street_name,
+            d.name                                      AS district_name,
+            s.max_speed,
+            ST_Y(ST_Centroid(s.geometry))               AS lat,
+            ST_X(ST_Centroid(s.geometry))               AS lon,
+            (ST_AsGeoJSON(s.geometry)::json -> 'coordinates') AS coords,
+            lt.segment_idx,
+            lt.avg_speed,
+            lt.free_flow_speed,
+            lt.congestion_level,
+            lt.source,
+            lt.timestamp
+        FROM streets s
+        LEFT JOIN districts d   ON s.district_id = d.id
+        JOIN  latest_traffic lt ON lt.street_id  = s.id
+        WHERE s.geometry IS NOT NULL
+        {district_filter}
+        ORDER BY s.name
+    """), params).fetchall()
+
+    if not rows:
         raise HTTPException(status_code=404, detail="Không có đường nào phù hợp")
 
-    street_ids = [s.id for s in streets]
-
-    # ── Subquery: timestamp mới nhất của mỗi (street, SEGMENT) ───────────
-    latest_subq = (
-        db.query(
-            TrafficData.street_id,
-            TrafficData.segment_idx,
-            func.max(TrafficData.timestamp).label("max_ts"),
-        )
-        .filter(TrafficData.street_id.in_(street_ids))
-        .group_by(TrafficData.street_id, TrafficData.segment_idx)
-        .subquery()
-    )
-
-    # ── JOIN lấy bản ghi đầy đủ mới nhất của từng (street, segment) ─────
-    latest_records = (
-        db.query(TrafficData)
-        .join(
-            latest_subq,
-            (TrafficData.street_id  == latest_subq.c.street_id)
-            & (TrafficData.segment_idx == latest_subq.c.segment_idx)
-            & (TrafficData.timestamp   == latest_subq.c.max_ts),
-        )
-        .all()
-    )
-
-    # Dict {street_id: [TrafficData, ...]} — giữ tất cả segment của mỗi đường
+    # ── Nhóm rows theo street_id ──────────────────────────────────────────────
     from collections import defaultdict
-    traffic_map: dict[int, list] = defaultdict(list)
-    for td in latest_records:
-        traffic_map[td.street_id].append(td)
+    # {street_id: {meta, segments: [...]}}
+    street_map: dict = {}
+    for row in rows:
+        sid = row.street_id
+        if sid not in street_map:
+            coords = None
+            if row.coords:
+                c = json.loads(row.coords) if isinstance(row.coords, str) else row.coords
+                if c and len(c) >= 2:
+                    coords = c
+            street_map[sid] = {
+                "street_id"   : sid,
+                "street_name" : row.street_name,
+                "district_name": row.district_name,
+                "max_speed"   : row.max_speed,
+                "lat"         : row.lat,
+                "lon"         : row.lon,
+                "_path"       : coords,   # tạm, xóa sau
+                "segments"    : [],
+                "_seg_data"   : [],       # tạm, xóa sau
+            }
+        street_map[sid]["_seg_data"].append({
+            "segment_idx"    : row.segment_idx,
+            "avg_speed"      : row.avg_speed,
+            "congestion_level": row.congestion_level,
+            "source"         : row.source,
+            "timestamp"      : row.timestamp,
+        })
 
-    # ── Lấy centroid (fallback) & full path của tất cả đường ─────────
-    centroid_map = _get_centroids(street_ids, db)
-    path_map     = _get_paths(street_ids, db)
+    # ── Build raw dict cho từng đường ─────────────────────────────────────────
+    streets_out = []
+    green = yellow = red = no_data = 0
+    timestamps_all = []
+    speeds_all     = []
 
-    # ── Ghép kết quả ─────────────────────────────────────────
-    result_list = [
-        _build_traffic_out(
-            s,
-            segments_data = traffic_map.get(s.id, []),
-            full_path     = path_map.get(s.id),
-            centroid      = centroid_map.get(s.id),
-        )
-        for s in streets
-    ]
+    for s in sorted(street_map.values(), key=lambda x: x["street_name"] or ""):
+        seg_data  = s.pop("_seg_data")
+        full_path = s.pop("_path")
 
-    # ── Thống kê tổng hợp ─────────────────────────────────────
-    green    = sum(1 for r in result_list if r.congestion_level == 0)
-    yellow   = sum(1 for r in result_list if r.congestion_level == 1)
-    red      = sum(1 for r in result_list if r.congestion_level == 2)
-    no_data  = sum(1 for r in result_list if r.congestion_level is None)
+        # Tính avg congestion + speed toàn đường
+        levels = [sd["congestion_level"] for sd in seg_data if sd["congestion_level"] is not None]
+        speeds = [sd["avg_speed"]        for sd in seg_data if sd["avg_speed"]        is not None]
+        avg_cong = round(sum(levels) / len(levels)) if levels else None
+        avg_spd  = round(sum(speeds)  / len(speeds), 1) if speeds else None
 
-    # Thời điểm dữ liệu mới nhất trong toàn bộ kết quả
-    timestamps = [r.timestamp for r in result_list if r.timestamp]
-    data_as_of = max(timestamps) if timestamps else None
+        # Timestamp + source từ segment đầu tiên
+        primary    = seg_data[0] if seg_data else {}
+        ts         = primary.get("timestamp")
+        ts_vn      = None
+        if ts:
+            ts_local = ts.astimezone(TZ_DANANG)
+            ts_vn    = ts_local.strftime("%Y-%m-%d %H:%M:%S +07:00")
+            timestamps_all.append(ts)
+        if avg_spd is not None:
+            speeds_all.append(avg_spd)
 
-    valid_speeds = [r.avg_speed for r in result_list if r.avg_speed is not None]
-    avg_speed_city = round(sum(valid_speeds) / len(valid_speeds), 1) if valid_speeds else None
+        # Build segments (per-segment path + color) — inline logic cũ
+        segments_out = []
+        seg_map = {sd["segment_idx"]: sd for sd in seg_data}
+        if full_path and len(full_path) >= 2:
+            if len(seg_map) <= 1:
+                sd   = seg_data[0] if seg_data else {}
+                cong = sd.get("congestion_level")
+                segments_out.append({
+                    "segment_idx"    : 0,
+                    "path"           : full_path,
+                    "avg_speed"      : sd.get("avg_speed"),
+                    "congestion_level": cong,
+                    "color"          : CONGESTION_COLORS.get(cong, CONGESTION_COLORS[None]),
+                })
+            else:
+                n_zones = max(seg_map.keys()) + 1
+                zones   = split_path_into_zones(full_path, n_zones=n_zones)
+                for zone in zones:
+                    idx  = zone["segment_idx"]
+                    sd   = seg_map.get(idx, {})
+                    cong = sd.get("congestion_level")
+                    segments_out.append({
+                        "segment_idx"    : idx,
+                        "path"           : zone["coords"],
+                        "avg_speed"      : sd.get("avg_speed"),
+                        "congestion_level": cong,
+                        "color"          : CONGESTION_COLORS.get(cong, CONGESTION_COLORS[None]),
+                    })
 
-    response = TrafficSummaryOut(
-        total_streets = len(result_list),
-        green_count   = green,
-        yellow_count  = yellow,
-        red_count     = red,
-        no_data_count = no_data,
-        avg_speed_city  = avg_speed_city,
-        data_as_of    = data_as_of,
-        streets       = result_list,
-    )
+        # Đếm thống kê
+        if avg_cong == 0:    green   += 1
+        elif avg_cong == 1:  yellow  += 1
+        elif avg_cong == 2:  red     += 1
+        else:                no_data += 1
+
+        streets_out.append({
+            "street_id"      : s["street_id"],
+            "street_name"    : s["street_name"],
+            "district_name"  : s["district_name"],
+            "avg_speed"      : avg_spd,
+            "max_speed"      : s["max_speed"],
+            "congestion_level": avg_cong,
+            "congestion_label": CONGESTION_LABEL.get(avg_cong),
+            "source"         : primary.get("source"),
+            "timestamp"      : ts.isoformat() if ts else None,
+            "timestamp_vn"   : ts_vn,
+            "lat"            : s["lat"],
+            "lon"            : s["lon"],
+            "path"           : full_path if not segments_out else None,
+            "segments"       : segments_out,
+            "color"          : CONGESTION_COLORS.get(avg_cong, CONGESTION_COLORS[None]),
+        })
+
+    data_as_of     = max(timestamps_all).isoformat() if timestamps_all else None
+    avg_speed_city = round(sum(speeds_all) / len(speeds_all), 1) if speeds_all else None
+
+    response = {
+        "total_streets" : len(streets_out),
+        "green_count"   : green,
+        "yellow_count"  : yellow,
+        "red_count"     : red,
+        "no_data_count" : no_data,
+        "avg_speed_city": avg_speed_city,
+        "data_as_of"    : data_as_of,
+        "streets"       : streets_out,
+    }
 
     # ── Lưu vào Redis cache (chỉ khi không filter district) ──────────────────
     if use_cache:
-        # Pydantic → dict → JSON để lưu Redis
-        cache_svc.set_traffic(response.model_dump(mode="json"))
+        cache_svc.set_traffic(response)
 
-    return response
+    return JSONResponse(content=response)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /api/traffic/current/{street_id} — 1 tuyến đường cụ thể

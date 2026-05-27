@@ -18,8 +18,8 @@ from redis_client import redis_client, get_json, set_json
 log = logging.getLogger("cache")
 
 # ─── TTL (Time-To-Live) mặc định ─────────────────────────────────────────────
-TTL_TRAFFIC_CURRENT  = 90    # giây — cache traffic toàn TP (30 phút cào 1 lần, 90s là đủ)
-TTL_TRAFFIC_STREET   = 90    # giây — cache traffic 1 đường
+TTL_TRAFFIC_CURRENT  = 270   # giây — sống gần hết 1 chu kỳ cào (5 phút)
+TTL_TRAFFIC_STREET   = 270   # giây — cache traffic 1 đường
 TTL_API_COUNTER      = 90_000  # giây (25 giờ) — reset counter TomTom mỗi ngày
 
 
@@ -44,16 +44,33 @@ def get_traffic() -> list | None:
     return data
 
 
-def set_traffic(records: list, ttl: int = TTL_TRAFFIC_CURRENT) -> None:
+def set_traffic(data: dict, ttl: int = TTL_TRAFFIC_CURRENT) -> None:
     """
     Lưu snapshot traffic toàn thành phố vào Redis.
-
-    Args:
-        records : list dict — kết quả từ query DB
-        ttl     : Số giây trước khi Redis tự xóa key (default 90s)
+    Lưu dưới dạng JSON string thô (không parse) để tránh double serialize.
     """
-    set_json(CACHE_KEY_TRAFFIC, records, ttl=ttl)
-    log.info(f"💾 Cache SET: {CACHE_KEY_TRAFFIC} (TTL={ttl}s, {len(records)} bản ghi)")
+    import json as _json
+    raw = _json.dumps(data, ensure_ascii=False, default=str)
+    redis_client.setex(name=CACHE_KEY_TRAFFIC, time=ttl, value=raw)
+    streets_count = len(data.get("streets", [])) if isinstance(data, dict) else "?"
+    log.info(f"💾 Cache SET: {CACHE_KEY_TRAFFIC} (TTL={ttl}s, {streets_count} đường, {len(raw)//1024}KB)")
+
+
+def get_traffic_raw() -> str | None:
+    """
+    Lấy snapshot traffic dưới dạng raw JSON string (chưa parse).
+    Dùng để trả thẳng về client mà không cần json.loads rồi json.dumps lại.
+
+    Returns:
+        str  — JSON string nếu cache HIT
+        None — nếu cache MISS
+    """
+    raw = redis_client.get(CACHE_KEY_TRAFFIC)
+    if raw is not None:
+        log.debug(f"✅ Cache HIT (raw): {CACHE_KEY_TRAFFIC}")
+    else:
+        log.debug(f"❌ Cache MISS: {CACHE_KEY_TRAFFIC} → sẽ query DB")
+    return raw
 
 
 def invalidate_traffic() -> None:

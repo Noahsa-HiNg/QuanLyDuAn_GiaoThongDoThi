@@ -31,7 +31,7 @@ MAP_ZOOM       = 12
 REFRESH_INTERVAL_MS = 60_000   # 60 giây
 
 # ── Cache TTL ─────────────────────────────────────────────────────────
-TRAFFIC_CACHE_TTL = 55    # giây — dưới refresh interval
+TRAFFIC_CACHE_TTL = 270   # giây — đủ sống gần hết 1 chu kỳ cào (5 phút)
 STREETS_CACHE_TTL = 300   # 5 phút — geometry ít thay đổi
 
 # ── HTTP ──────────────────────────────────────────────────────────────
