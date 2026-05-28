@@ -31,12 +31,14 @@ logged_in = (
 user_role = st.session_state.get("user_role", "")
 
 # ── Định nghĩa tất cả pages ───────────────────────────────────────
-pg_home      = st.Page("pages/1_home.py",            title="Bản đồ giao thông",   icon="🏠")
-pg_route     = st.Page("pages/3_route_finder.py",    title="Tìm đường",           icon="🗺️")
-pg_login     = st.Page("pages/4_login.py",           title="Đăng nhập",           icon="🔐")
-pg_dashboard = st.Page("pages/2_dashboard.py",       title="Dashboard",           icon="📊")
-pg_users     = st.Page("pages/5_admin_users.py",     title="Quản lý tài khoản",   icon="👥")
-pg_scheduler = st.Page("pages/6_admin_scheduler.py", title="Quản lý cào dữ liệu", icon="🔄")
+pg_home       = st.Page("pages/1_home.py",            title="Bản đồ giao thông",   icon="🏠")
+pg_route      = st.Page("pages/3_route_finder.py",    title="Tìm đường",           icon="🗺️")
+pg_login      = st.Page("pages/4_login.py",           title="Đăng nhập",           icon="🔐")
+pg_dashboard  = st.Page("pages/2_dashboard.py",       title="Dashboard",           icon="📊")
+pg_csgt       = st.Page("pages/7_csgt_dashboard.py",  title="Dashboard CSGT",      icon="🚔")
+pg_incidents  = st.Page("pages/8_incidents.py",       title="Quản lý Sự cố",       icon="🚨")
+pg_users      = st.Page("pages/5_admin_users.py",     title="Quản lý tài khoản",   icon="👥")
+pg_scheduler  = st.Page("pages/6_admin_scheduler.py", title="Quản lý cào dữ liệu", icon="🔄")
 
 # ── Build danh sách pages theo role ───────────────────────────────
 if not logged_in:
@@ -44,14 +46,18 @@ if not logged_in:
     nav = [pg_home, pg_route, pg_login]
 
 elif user_role == "csgt":
-    # CSGT: Home + Tìm đường + Dashboard (không thấy quản trị)
-    nav = [pg_home, pg_route, pg_dashboard]
+    # CSGT: Home + Tìm đường + Dashboard + CSGT pages
+    nav = {
+        "Chung"         : [pg_home, pg_route, pg_dashboard],
+        "🚔 Điều hành"  : [pg_csgt, pg_incidents],
+    }
 
 else:
-    # Admin: tất cả — chia 2 section cho gọn
+    # Admin: tất cả — chia 3 section cho gọn
     nav = {
-        "Chung": [pg_home, pg_route, pg_dashboard],
-        "⚙️ Quản trị": [pg_users, pg_scheduler],
+        "Chung"         : [pg_home, pg_route, pg_dashboard],
+        "🚔 Điều hành"  : [pg_csgt, pg_incidents],
+        "⚙️ Quản trị"   : [pg_users, pg_scheduler],
     }
 
 # ── Khởi chạy navigation ──────────────────────────────────────────

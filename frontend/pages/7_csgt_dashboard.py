@@ -93,6 +93,19 @@ st.markdown("""
 }
 .csgt-fade { animation: fadeInUp 0.4s ease-out; }
 .block-container { padding-right:1rem !important; padding-left:1.5rem !important; }
+
+/* Fix: vertically center dispatch buttons with street cards in Top10 rows */
+[data-testid="stVerticalBlock"]:has(>[data-testid="element-container"]>[data-testid="stButton"]) {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    min-height: 52px;
+}
+[data-testid="stVerticalBlock"]:has(>[data-testid="element-container"]>[data-testid="stButton"])
+  [data-testid="element-container"] {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -150,7 +163,7 @@ with c2:
                            f"{total_chậm} đường đang chậm"), unsafe_allow_html=True)
 with c3:
     spd_color = "#4ade80" if avg_spd >= 40 else "#fbbf24" if avg_spd >= 20 else "#f87171"
-    st.markdown(_kpi_card("🚗", f"{avg_spd:.0f} km/h", "Tốc độ TB toàn TP",
+    st.markdown(_kpi_card("🚗", f"{avg_spd:.0f}", "km/h · Tốc độ TB toàn TP",
                            spd_color), unsafe_allow_html=True)
 with c4:
     st.markdown(_kpi_card("📋", total_incidents, "Tổng sự cố hệ thống", "#818cf8",
@@ -269,7 +282,6 @@ with top10_col:
                   </div>
                 </div>""", unsafe_allow_html=True)
             with c_btn:
-                st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
                 if st.button("🚔 Điều động", key=f"dispatch_top_{i}",
                              help=f"Tạo sự cố điều động cho {rd.get('street_name','')}",
                              use_container_width=True):

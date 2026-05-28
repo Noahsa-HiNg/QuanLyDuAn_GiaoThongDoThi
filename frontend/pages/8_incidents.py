@@ -1,13 +1,11 @@
 """
 pages/8_incidents.py — Quản lý Sự cố & Lô Cốt
-Sprint 4 | SCRUM-53
+Sprint 4 | SCRUM-53 v1.2
 
-Tính năng:
-  - Danh sách sự cố với filter (type, status, is_active)
-  - Badge trạng thái: active / dispatched / resolved
-  - Nút Điều động (active → dispatched) và Đã xử lý (→ resolved)
-  - Form thêm sự cố mới (CSGT/Admin)
-  - Xóa sự cố (Admin only)
+Cải tiến v1.2:
+  - st.dialog cho form Thêm mới (nằm ở đầu, không trôi xuống cuối)
+  - Batch selection: chọn nhiều sự cố, xử lý 1 lần
+  - CSS fix: button alignment + badge min-width đồng đều
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,22 +32,22 @@ TZ7 = timezone(timedelta(hours=7))
 
 # ── Hằng số ──────────────────────────────────────────────────────────────────
 _TYPE_OPTS = {
-    "": "Tất cả loại",
+    "":          "Tất cả loại",
     "roadblock": "🚧 Lô cốt",
     "accident":  "💥 Tai nạn",
     "event":     "📢 Sự kiện",
     "community": "👥 Cộng đồng",
 }
 _STATUS_OPTS = {
-    "": "Tất cả trạng thái",
+    "":           "Tất cả trạng thái",
     "active":     "🔴 Đang xảy ra",
     "dispatched": "🟡 Đã điều động",
     "resolved":   "🟢 Đã xử lý",
 }
 _STATUS_BG = {
-    "active":     ("rgba(239,68,68,0.12)",   "#f87171",  "rgba(239,68,68,0.3)"),
-    "dispatched": ("rgba(234,179,8,0.12)",    "#fbbf24",  "rgba(234,179,8,0.3)"),
-    "resolved":   ("rgba(34,197,94,0.12)",    "#4ade80",  "rgba(34,197,94,0.3)"),
+    "active":     ("rgba(239,68,68,0.12)",  "#f87171",  "rgba(239,68,68,0.3)"),
+    "dispatched": ("rgba(234,179,8,0.12)",   "#fbbf24",  "rgba(234,179,8,0.3)"),
+    "resolved":   ("rgba(34,197,94,0.12)",   "#4ade80",  "rgba(34,197,94,0.3)"),
 }
 _SEV_LABEL = {1: "🟢 Thấp", 2: "🟡 Trung bình", 3: "🔴 Cao"}
 _SEV_COLOR = {1: "#4ade80", 2: "#fbbf24", 3: "#f87171"}
@@ -60,8 +58,8 @@ def _status_badge(status: str) -> str:
     labels = {"active": "Đang xảy ra", "dispatched": "Đã điều động", "resolved": "Đã xử lý"}
     return (
         f'<span style="background:{bg};color:{clr};border:1px solid {bdr};'
-        f'border-radius:20px;padding:3px 11px;font-size:0.76rem;font-weight:600">'
-        f'{labels.get(status, status)}</span>'
+        f'border-radius:20px;padding:2px 10px;font-size:0.76rem;font-weight:600;'
+        f'white-space:nowrap">{labels.get(status, status)}</span>'
     )
 
 
@@ -93,11 +91,101 @@ st.markdown("""
   border-color: rgba(255,255,255,0.12);
 }
 .block-container { padding-right:1rem !important; padding-left:1.5rem !important; }
+
+/* Fix 1: badge min-width đồng đều */
+.stat-badge {
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 0.82rem;
+  min-width: 140px;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Fix 2: vertically center action buttons with incident cards */
+[data-testid="stVerticalBlock"]:has(>[data-testid="element-container"]>[data-testid="stButton"]) {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    min-height: 80px;
+}
+[data-testid="stVerticalBlock"]:has(>[data-testid="element-container"]>[data-testid="stButton"])
+  [data-testid="element-container"] {
+    margin-top: 0 !important;
+    margin-bottom: 4px !important;
+}
+
+/* Fix 3: batch action bar */
+.batch-bar {
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 </style>
 """, unsafe_allow_html=True)
 
 token     = st.session_state.get("token", "")
 user_role = st.session_state.get("user_role", "")
+
+# ── Dialog: Thêm sự cố mới ───────────────────────────────────────────────────
+@st.dialog("➕ Thêm Sự cố / Lô cốt mới", width="large")
+def _show_create_dialog():
+    st.markdown("""
+    <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);
+                border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:0.83rem;
+                color:#a5b4fc">
+      ℹ️ Điền thông tin sự cố. <b>Street ID</b> là ID tuyến đường trong hệ thống.
+    </div>""", unsafe_allow_html=True)
+
+    with st.form("create_incident_form", clear_on_submit=True):
+        f1, f2 = st.columns(2)
+        with f1:
+            f_street_id = st.number_input("Street ID *", min_value=1, value=1)
+            f_type = st.selectbox("Loại sự cố *",
+                                  ["roadblock", "accident", "event", "community"],
+                                  format_func=lambda k: _TYPE_OPTS.get(k, k))
+            f_sev = st.select_slider("Mức độ nghiêm trọng",
+                                     options=[1, 2, 3],
+                                     format_func=lambda x: _SEV_LABEL[x])
+        with f2:
+            f_start = st.date_input("Ngày bắt đầu *", value=datetime.now(TZ7).date())
+            f_start_time = st.time_input("Giờ bắt đầu *", value=datetime.now(TZ7).time())
+            f_status = st.selectbox("Trạng thái ban đầu",
+                                    ["active", "dispatched"],
+                                    format_func=lambda k: _STATUS_OPTS.get(k, k))
+
+        f_desc = st.text_area("Mô tả chi tiết", placeholder="Mô tả tình trạng cụ thể...")
+        submitted = st.form_submit_button("🚨 Tạo sự cố", type="primary",
+                                          use_container_width=True)
+
+    if submitted:
+        start_dt = datetime.combine(f_start, f_start_time, tzinfo=TZ7).isoformat()
+        payload = {
+            "street_id":   int(f_street_id),
+            "type":        f_type,
+            "start_time":  start_dt,
+            "severity":    int(f_sev),
+            "description": f_desc.strip() if f_desc else None,
+            "status":      f_status,
+            "is_active":   True,
+        }
+        with st.spinner("Đang tạo sự cố..."):
+            res = create_incident(token, payload)
+        if res.get("ok"):
+            inc_data = res.get("data", {})
+            st.success(f"✅ Tạo thành công! Sự cố #{inc_data.get('id', '?')} đã được ghi nhận.")
+            st.rerun()
+        else:
+            st.error(f"❌ Lỗi: {res.get('error', 'Không rõ lỗi')}")
+
 
 # ── Header ───────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -115,8 +203,8 @@ st.markdown("""
 <hr style="border-color:rgba(255,255,255,0.07);margin:8px 0 18px">
 """, unsafe_allow_html=True)
 
-# ── Filter Row ───────────────────────────────────────────────────────────────
-fc1, fc2, fc3, fc4 = st.columns([2, 2, 2, 1])
+# ── Filter Row (với nút Thêm mới ở đầu) ──────────────────────────────────────
+fc1, fc2, fc3, fc4, fc5 = st.columns([2, 2, 2, 1, 1.2])
 
 with fc1:
     type_filter = st.selectbox(
@@ -134,13 +222,16 @@ with fc3:
     active_filter = st.selectbox(
         "Hiệu lực", ["all", "active_only", "inactive_only"],
         format_func=lambda x: {
-            "all": "Tất cả", "active_only": "✅ Còn hiệu lực", "inactive_only": "❌ Đã hết hiệu lực"
+            "all": "Tất cả", "active_only": "✅ Còn hiệu lực", "inactive_only": "❌ Hết hiệu lực"
         }[x],
         key="inc_active_filter", label_visibility="collapsed",
     )
 with fc4:
     if st.button("🔄 Làm mới", use_container_width=True, key="inc_refresh"):
         st.rerun()
+with fc5:
+    if st.button("➕ Thêm mới", use_container_width=True, key="btn_add_inc", type="primary"):
+        _show_create_dialog()
 
 # ── Fetch incidents ───────────────────────────────────────────────────────────
 is_active_param = None
@@ -158,35 +249,63 @@ with st.spinner("Đang tải sự cố..."):
         page_size=50,
     )
 
-# ── Stats Row ─────────────────────────────────────────────────────────────────
+# ── Stats Row (badge đồng kích cỡ) ───────────────────────────────────────────
 n_active     = sum(1 for i in incidents if i.get("status") == "active")
 n_dispatched = sum(1 for i in incidents if i.get("status") == "dispatched")
 n_resolved   = sum(1 for i in incidents if i.get("status") == "resolved")
 
 st.markdown(f"""
-<div class="inc-fade" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
-  <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);
-              border-radius:10px;padding:8px 16px;font-size:0.82rem">
+<div class="inc-fade" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+  <div class="stat-badge" style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2)">
     🔴 <b style="color:#f87171">{n_active}</b> <span style="color:#94a3b8">Đang xảy ra</span>
   </div>
-  <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.2);
-              border-radius:10px;padding:8px 16px;font-size:0.82rem">
+  <div class="stat-badge" style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.2)">
     🟡 <b style="color:#fbbf24">{n_dispatched}</b> <span style="color:#94a3b8">Đã điều động</span>
   </div>
-  <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);
-              border-radius:10px;padding:8px 16px;font-size:0.82rem">
+  <div class="stat-badge" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2)">
     🟢 <b style="color:#4ade80">{n_resolved}</b> <span style="color:#94a3b8">Đã xử lý</span>
   </div>
-  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
-              border-radius:10px;padding:8px 16px;font-size:0.82rem">
+  <div class="stat-badge" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08)">
     📋 <b style="color:#e2e8f0">{len(incidents)}</b> <span style="color:#94a3b8">Tổng (trang này)</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
+# ── Batch selection action bar ────────────────────────────────────────────────
+if incidents:
+    # Thu thập IDs đang được chọn (từ session_state của các checkbox)
+    selected_ids = [
+        inc["id"] for inc in incidents
+        if inc.get("status") != "resolved"
+        and st.session_state.get(f"sel_{inc.get('id', 0)}", False)
+    ]
+
+    if selected_ids:
+        bc1, bc2, bc3 = st.columns([3, 1.5, 1.5])
+        with bc1:
+            st.markdown(
+                f'<div style="padding:10px 4px;color:#a5b4fc;font-weight:600">'
+                f'☑️ Đã chọn <b>{len(selected_ids)}</b> sự cố</div>',
+                unsafe_allow_html=True
+            )
+        with bc2:
+            if st.button(f"✅ Xử lý tất cả ({len(selected_ids)})",
+                         type="primary", use_container_width=True, key="batch_resolve"):
+                for sid in selected_ids:
+                    update_incident_status(token, sid, "resolved")
+                for sid in selected_ids:
+                    st.session_state.pop(f"sel_{sid}", None)
+                st.success(f"✅ Đã xử lý {len(selected_ids)} sự cố!")
+                st.rerun()
+        with bc3:
+            if st.button("✖ Bỏ chọn tất cả", use_container_width=True, key="batch_clear"):
+                for inc in incidents:
+                    st.session_state.pop(f"sel_{inc.get('id', 0)}", None)
+                st.rerun()
+
 # ── Danh sách sự cố ──────────────────────────────────────────────────────────
 if not incidents:
-    st.info("📭 Không có sự cố nào phù hợp với bộ lọc. Hãy thêm sự cố mới bên dưới.")
+    st.info("📭 Không có sự cố nào phù hợp với bộ lọc.")
 else:
     st.markdown(f"<p style='font-size:0.75rem;color:#475569;margin-bottom:8px'>"
                 f"Hiển thị {len(incidents)} sự cố</p>", unsafe_allow_html=True)
@@ -204,8 +323,14 @@ else:
         _, clr, bdr = _STATUS_BG.get(status, _STATUS_BG["active"])
         sev_clr = _SEV_COLOR.get(sev, "#94a3b8")
 
-        # Card header row
-        col_info, col_actions = st.columns([3, 1])
+        # Layout: checkbox | card info | actions
+        col_cb, col_info, col_actions = st.columns([0.25, 3, 1])
+
+        with col_cb:
+            # Checkbox chỉ cho sự cố chưa xử lý
+            if status != "resolved":
+                st.checkbox("", key=f"sel_{inc_id}",
+                            label_visibility="collapsed")
 
         with col_info:
             st.markdown(f"""
@@ -229,26 +354,24 @@ else:
             </div>""", unsafe_allow_html=True)
 
         with col_actions:
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
             # Nút Điều động (chỉ khi active)
             if status == "active":
                 if st.button("🚔 Điều động", key=f"dispatch_{inc_id}",
                              use_container_width=True, type="primary"):
                     res = update_incident_status(token, inc_id, "dispatched")
                     if res.get("ok"):
-                        st.success(f"✅ Đã điều động sự cố #{inc_id}")
+                        st.success(f"✅ Đã điều động #{inc_id}")
                         st.rerun()
                     else:
                         st.error(f"❌ {res.get('error')}")
 
-            # Nút Đã xử lý (khi active hoặc dispatched)
+            # Nút Đã xử lý
             if status in ("active", "dispatched"):
                 if st.button("✅ Đã xử lý", key=f"resolve_{inc_id}",
                              use_container_width=True):
                     res = update_incident_status(token, inc_id, "resolved")
                     if res.get("ok"):
-                        st.success(f"✅ Đã đánh dấu giải quyết sự cố #{inc_id}")
+                        st.success(f"✅ Giải quyết #{inc_id}")
                         st.rerun()
                     else:
                         st.error(f"❌ {res.get('error')}")
@@ -261,8 +384,8 @@ else:
 
                 if st.session_state.get(f"confirm_del_{inc_id}"):
                     st.markdown(
-                        f'<p style="font-size:0.73rem;color:#f87171">'
-                        f'Xác nhận xóa #{inc_id}?</p>', unsafe_allow_html=True)
+                        f'<p style="font-size:0.73rem;color:#f87171">Xác nhận xóa #{inc_id}?</p>',
+                        unsafe_allow_html=True)
                     cc1, cc2 = st.columns(2)
                     with cc1:
                         if st.button("Có", key=f"del_yes_{inc_id}", type="primary"):
@@ -277,70 +400,6 @@ else:
                         if st.button("Không", key=f"del_no_{inc_id}"):
                             st.session_state.pop(f"confirm_del_{inc_id}", None)
                             st.rerun()
-
-st.markdown("<hr style='border-color:rgba(255,255,255,0.06);margin:20px 0'>",
-            unsafe_allow_html=True)
-
-# ════════════════════════════════════════════════════════════════════════
-# Form thêm sự cố mới
-# ════════════════════════════════════════════════════════════════════════
-with st.expander("➕ Thêm sự cố / Lô cốt mới", expanded=False):
-    st.markdown("""
-    <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);
-                border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:0.83rem;
-                color:#a5b4fc">
-      ℹ️ Điền thông tin sự cố. <b>Street ID</b> là ID tuyến đường trong hệ thống.
-    </div>""", unsafe_allow_html=True)
-
-    with st.form("create_incident_form", clear_on_submit=True):
-        f1, f2 = st.columns(2)
-        with f1:
-            f_street_id = st.number_input("Street ID *", min_value=1, value=1,
-                                          key="f_street_id")
-            f_type = st.selectbox("Loại sự cố *",
-                                  ["roadblock", "accident", "event", "community"],
-                                  format_func=lambda k: _TYPE_OPTS.get(k, k),
-                                  key="f_type")
-            f_sev = st.select_slider("Mức độ nghiêm trọng",
-                                     options=[1, 2, 3],
-                                     format_func=lambda x: _SEV_LABEL[x],
-                                     key="f_severity")
-        with f2:
-            f_start = st.date_input("Ngày bắt đầu *", value=datetime.now(TZ7).date(),
-                                    key="f_start_date")
-            f_start_time = st.time_input("Giờ bắt đầu *",
-                                          value=datetime.now(TZ7).time(),
-                                          key="f_start_time")
-            f_status = st.selectbox("Trạng thái ban đầu",
-                                    ["active", "dispatched"],
-                                    format_func=lambda k: _STATUS_OPTS.get(k, k),
-                                    key="f_status")
-
-        f_desc = st.text_area("Mô tả chi tiết", placeholder="Mô tả tình trạng cụ thể...",
-                               key="f_desc")
-        submitted = st.form_submit_button("🚨 Tạo sự cố", type="primary",
-                                          use_container_width=True)
-
-    if submitted:
-        start_dt = datetime.combine(f_start, f_start_time,
-                                     tzinfo=TZ7).isoformat()
-        payload = {
-            "street_id":   int(f_street_id),
-            "type":        f_type,
-            "start_time":  start_dt,
-            "severity":    int(f_sev),
-            "description": f_desc.strip() if f_desc else None,
-            "status":      f_status,
-            "is_active":   True,
-        }
-        with st.spinner("Đang tạo sự cố..."):
-            res = create_incident(token, payload)
-        if res.get("ok"):
-            inc_data = res.get("data", {})
-            st.success(f"✅ Tạo thành công! Sự cố #{inc_data.get('id', '?')} đã được ghi nhận.")
-            st.rerun()
-        else:
-            st.error(f"❌ Lỗi: {res.get('error', 'Không rõ lỗi')}")
 
 # ── Footer ───────────────────────────────────────────────────────────────────
 st.markdown(f"""

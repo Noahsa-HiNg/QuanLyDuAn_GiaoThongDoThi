@@ -95,7 +95,7 @@ def _compute_view(
 # ── Inject CSS + ambient blobs ────────────────────────────────────
 setup_ui()
 
-# ── Auto-refresh mỗi 60 giây — FIX 4: lấy count để tính countdown ──
+# ── Auto-refresh mỗi 240 giây — FIX 4: lấy count để tính countdown ──
 _refresh_count = st_autorefresh(interval=REFRESH_INTERVAL_MS, key="traffic_refresh")
 
 # ── FIX 4: Theo dõi thời điểm refresh gần nhất để tính countdown ──
@@ -123,7 +123,7 @@ def render_header(data_as_of: str, seconds_remaining: int = 60) -> None:
                 <span>·</span>
                 <span>Data TomTom: <b style="color:#94a3b8">{data_as_of}</b></span>
                 <span>·</span>
-                <span title="Trang kiểm tra data mới mỗi 60s. Scheduler thu thập từ TomTom mỗi 30 phút.">Kiểm tra lại sau <b style="color:#94a3b8">{seconds_remaining}s</b></span>
+                <span title="Trang kiểm tra data mới mỗi 240s. Scheduler thu thập từ TomTom mỗi 30 phút.">Kiểm tra lại sau <b style="color:#94a3b8">{seconds_remaining}s</b></span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -198,7 +198,8 @@ def main() -> None:
         with st.spinner("⏳ Đang tải dữ liệu giao thông..."):
             traffic = get_traffic_data(district_id)
         df_full = build_map_dataframe(traffic)
-        meta    = traffic
+        # Normalize key: API tra 'avg_speed', render_kpi_cards can 'avg_speed_city'
+        meta = {**traffic, "avg_speed_city": traffic.get("avg_speed_city") or traffic.get("avg_speed", 0)}
 
     # -- Header -------------------------------------------------------------------
     render_header(_fmt_time(meta.get("data_as_of", "")), _seconds_remaining)

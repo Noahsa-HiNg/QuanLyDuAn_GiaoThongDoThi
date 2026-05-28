@@ -384,7 +384,7 @@ def render_sidebar(
             <div style="font-size:0.75rem; color:#475569; line-height:1.8">
                 📡 Nguồn: TomTom + Goong API<br>
                 🔄 Thu thập data: mỗi 30 phút<br>
-                🖥️ Trang kiểm tra: mỗi 60 giây<br>
+                🖥️ Trang kiểm tra: mỗi 4 phút<br>
                 🗃️ DB: PostgreSQL + PostGIS
             </div>
             """, unsafe_allow_html=True)
