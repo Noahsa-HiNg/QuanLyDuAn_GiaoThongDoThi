@@ -116,6 +116,19 @@ def filter_dataframe(
 
 
 
+def _fmt_ts_vn(iso_str) -> str:
+    """Parse ISO UTC timestamp -> formatted VN +07 string. Frontend-only, no backend change."""
+    if not iso_str:
+        return "-"
+    try:
+        from datetime import datetime, timezone, timedelta
+        s = str(iso_str).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s).astimezone(timezone(timedelta(hours=7)))
+        return dt.strftime("%Y-%m-%d %H:%M:%S +07:00")
+    except Exception:
+        return str(iso_str)
+
+
 def build_map_dataframe_split(geometry: dict, state: dict) -> tuple:
     """
     Merge geometry (tinh, cache 1h) + state (dong, poll 60s) -> DataFrame + meta KPI.
@@ -152,7 +165,7 @@ def build_map_dataframe_split(geometry: dict, state: dict) -> tuple:
             "max_speed"       : g.get("max_speed") or 50,
             "congestion_level": level,
             "congestion_label": s.get("congestion_label") or congestion_label(level),
-            "timestamp_vn"    : s.get("timestamp", "-"),
+            "timestamp_vn"    : _fmt_ts_vn(s.get("timestamp")),
             "lat"             : g.get("lat") or 16.0544,
             "lon"             : g.get("lon") or 108.2022,
             "color"           : color,

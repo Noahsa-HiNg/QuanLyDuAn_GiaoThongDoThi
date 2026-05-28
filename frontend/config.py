@@ -28,7 +28,7 @@ MAP_CENTER_LON = 108.2022
 MAP_ZOOM       = 12
 
 # ── Auto-refresh ──────────────────────────────────────────────────────
-REFRESH_INTERVAL_MS = 60_000   # 60 giây
+REFRESH_INTERVAL_MS = 240_000  # 240 giây (4 phút) — khớp chu kỳ cache /api/traffic/state (270s)
 
 # ── Cache TTL ─────────────────────────────────────────────────────────
 TRAFFIC_CACHE_TTL = 270   # giây — đủ sống gần hết 1 chu kỳ cào (5 phút)
