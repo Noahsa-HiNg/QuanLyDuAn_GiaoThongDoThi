@@ -1,0 +1,7 @@
+:root {
+  /* Dùng cho Mapbox GL JS expression và inline style dynamic */
+  --color-traffic-clear: #22c55e;
+  --color-traffic-slow: #f59e0b;
+  --color-traffic-congested: #ef4444;
+  --color-traffic-unknown: #94a3b8;
+}
