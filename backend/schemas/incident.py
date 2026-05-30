@@ -32,7 +32,7 @@ class IncidentBase(BaseModel):
 
 
 class IncidentCreate(IncidentBase):
-    """Schema nhận vào khi tạo mới sự cố"""
+    """Schema nhận vào khi tạo mới sự cố (CSGT nhập tay)"""
     pass
 
 
@@ -74,5 +74,16 @@ class IncidentOut(IncidentBase):
     created_by: Optional[int] = None
     created_at: datetime
 
+    # Thông tin nguồn gốc — giúp frontend phân biệt manual vs tự động
+    here_incident_id: Optional[str] = Field(
+        None,
+        description="ID gốc từ HERE API (NULL nếu CSGT nhập tay)"
+    )
+    source: str = Field(
+        "manual",
+        description="Nguồn tạo: 'manual' (CSGT nhập tay) hoặc 'here_api' (tự động cào)"
+    )
+
     class Config:
         from_attributes = True
+

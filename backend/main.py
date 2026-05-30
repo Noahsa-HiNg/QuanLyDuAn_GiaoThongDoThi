@@ -17,7 +17,7 @@ Chạy qua Docker Compose:
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -121,6 +121,9 @@ app.include_router(predict.router,  prefix="/api", tags=["Predict"])
 app.include_router(route.router,     prefix="/api", tags=["Route"])
 app.include_router(stats.router,     prefix="/api", tags=["Stats"])
 app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
+
+
+
 # TODO: Thêm router theo từng sprint
 # app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
 # app.include_router(admin.router,    prefix="/api", tags=["Admin"])
