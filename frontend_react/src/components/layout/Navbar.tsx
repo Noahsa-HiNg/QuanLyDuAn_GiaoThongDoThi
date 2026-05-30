@@ -82,11 +82,11 @@ const Navbar: React.FC = () => {
         {isLoggedIn && user ? (
           <div className="flex items-center gap-4">
             <div className="text-right hidden sm:block">
-              <span className="block text-sm font-semibold text-gray-800">{user.full_name}</span>
+              <span className="block text-sm font-semibold text-gray-800">{user.full_name || user.email}</span>
               <span className="block text-[10px] font-bold text-blue-600 uppercase tracking-wider">{user.role}</span>
             </div>
             <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200">
-              {user.full_name.charAt(0).toUpperCase()}
+              {(user.full_name || user.email || 'U').charAt(0).toUpperCase()}
             </div>
             <button
               onClick={handleLogout}

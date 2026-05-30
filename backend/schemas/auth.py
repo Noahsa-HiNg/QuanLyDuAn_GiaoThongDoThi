@@ -5,6 +5,7 @@ TokenResponse : response trả về sau khi login thành công
 UserInfo      : thông tin user nhúng trong response (không có password)
 """
 
+from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
 class LoginRequest(BaseModel):
@@ -19,6 +20,7 @@ class UserInfo(BaseModel):
     id: int
     email: EmailStr
     role: str  # 'csgt', 'admin'
+    full_name: Optional[str] = None
 
     model_config = {"from_attributes": True}  # Cho phép đọc từ SQLAlchemy ORM object
 
