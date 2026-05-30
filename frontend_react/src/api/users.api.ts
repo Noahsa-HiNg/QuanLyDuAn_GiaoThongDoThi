@@ -22,4 +22,8 @@ export const usersApi = {
     await api.delete(`/api/users/${userId}`);
     return { ok: true };
   },
+  getOfficers: async (): Promise<User[]> => {
+    const response = await api.get<User[]>('/api/users/officers');
+    return response.data;
+  },
 };

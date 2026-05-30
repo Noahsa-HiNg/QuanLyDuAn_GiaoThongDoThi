@@ -60,6 +60,12 @@ def test_traffic_current():
     response = client.get("/api/traffic/current")
     assert response.status_code == 200
 
+
+def test_export_traffic_invalid_date():
+    response = client.get("/api/export/traffic?date=2026-31-12")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Ngày không hợp lệ. Vui lòng dùng định dạng YYYY-MM-DD."
+
 # --- KIỂM THỬ PHÂN HỆ THỐNG KÊ (STATS ENDPOINTS) ---
 
 def test_stats_top_congested_unauthorized():

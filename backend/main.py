@@ -30,6 +30,7 @@ from routers import predict
 from routers import route
 from routers import stats
 from routers import incidents
+from routers import feedback
 log = logging.getLogger("main")
 
 
@@ -65,8 +66,18 @@ async def lifespan(app: FastAPI):
                 ON incidents (street_id, is_active)
                 WHERE is_active = TRUE
             """))
+            # Tự động thêm cột kinh độ, vĩ độ và cảnh sát được phân công nếu chưa tồn tại
+            conn.execute(_text("""
+                ALTER TABLE incidents ADD COLUMN IF NOT EXISTS latitude FLOAT;
+            """))
+            conn.execute(_text("""
+                ALTER TABLE incidents ADD COLUMN IF NOT EXISTS longitude FLOAT;
+            """))
+            conn.execute(_text("""
+                ALTER TABLE incidents ADD COLUMN IF NOT EXISTS officer_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+            """))
             conn.commit()
-        log.info("✅ DB indexes verified/created")
+        log.info("✅ DB indexes and columns verified/created")
     except Exception as e:
         log.warning(f"⚠️ Không tạo được DB index (có thể chưa có bảng): {e}")
 
@@ -124,9 +135,11 @@ app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
 
 
 
+
 # TODO: Thêm router theo từng sprint
 # app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
 # app.include_router(admin.router,    prefix="/api", tags=["Admin"])
+
 
 
 # ─────────────────────────────────────────────────────────────

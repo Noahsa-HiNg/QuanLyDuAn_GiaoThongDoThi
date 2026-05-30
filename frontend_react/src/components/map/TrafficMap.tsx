@@ -26,7 +26,9 @@ interface TrafficMapProps {
   predictionData?: PredictionItem[] | null;
   hideTrafficLines?: boolean;
   activeIncidents?: Incident[];
-  onStreetClick?: (streetName: string) => void;
+  onStreetClick?: (streetName: string, coords?: { lat: number; lng: number }) => void;
+  isReportMode?: boolean;
+  onReportClick?: (lat: number, lng: number, streetName?: string) => void;
   children?: (map: mapboxgl.Map) => React.ReactNode;
 }
 
@@ -39,6 +41,8 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
   hideTrafficLines = false,
   activeIncidents = [],
   onStreetClick,
+  isReportMode = false,
+  onReportClick,
   children,
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -46,9 +50,14 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
   const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
 
   const onStreetClickRef = useRef(onStreetClick);
+  const isReportModeRef = useRef(isReportMode);
+  const onReportClickRef = useRef(onReportClick);
+
   useEffect(() => {
     onStreetClickRef.current = onStreetClick;
-  }, [onStreetClick]);
+    isReportModeRef.current = isReportMode;
+    onReportClickRef.current = onReportClick;
+  }, [onStreetClick, isReportMode, onReportClick]);
 
   const { data: geometry, isLoading: isGeomLoading, error: geomError } = useGeometry();
   const { data: trafficState, isLoading: isStateLoading, error: stateError } = useTrafficData();
@@ -75,6 +84,8 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
 
     // Click handler for popup and dispatch trigger
     map.on('click', 'traffic-lines', (e) => {
+      if (isReportModeRef.current) return;
+
       if (!e.features || e.features.length === 0) return;
       const feat = e.features[0];
       const props = feat.properties;
@@ -82,9 +93,9 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
 
       const name = props.name || 'Không rõ tên đường';
       
-      // Fire callback to open dispatch modal
+      // Fire callback to open dispatch modal with coordinates
       if (onStreetClickRef.current) {
-        onStreetClickRef.current(name);
+        onStreetClickRef.current(name, { lat: e.lngLat.lat, lng: e.lngLat.lng });
       }
 
       const district = props.district || 'Không rõ quận';
@@ -109,12 +120,32 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
         .addTo(map);
     });
 
+    // General map click listener for report mode
+    map.on('click', (e) => {
+      if (isReportModeRef.current) {
+        const lat = e.lngLat.lat;
+        const lng = e.lngLat.lng;
+        const features = map.queryRenderedFeatures(e.point, { layers: ['traffic-lines'] });
+        let streetName = '';
+        if (features && features.length > 0) {
+          streetName = features[0].properties?.name || '';
+        }
+        if (onReportClickRef.current) {
+          onReportClickRef.current(lat, lng, streetName);
+        }
+      }
+    });
+
     // Hover effect pointer
     map.on('mouseenter', 'traffic-lines', () => {
-      map.getCanvas().style.cursor = 'pointer';
+      if (isReportModeRef.current) {
+        map.getCanvas().style.cursor = 'crosshair';
+      } else {
+        map.getCanvas().style.cursor = 'pointer';
+      }
     });
     map.on('mouseleave', 'traffic-lines', () => {
-      map.getCanvas().style.cursor = '';
+      map.getCanvas().style.cursor = isReportModeRef.current ? 'crosshair' : '';
     });
 
     return () => {
@@ -303,8 +334,20 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
 
       // Compute midpoint of the path
       const midIdx = Math.floor(street.path.length / 2);
-      const midpoint = street.path[midIdx];
-      if (!midpoint) return;
+      // Determine marker coordinate: custom click position or street midpoint
+      let markerCoords: [number, number];
+      if (
+        incident.latitude !== undefined && 
+        incident.latitude !== null && 
+        incident.longitude !== undefined && 
+        incident.longitude !== null
+      ) {
+        markerCoords = [incident.longitude, incident.latitude];
+      } else {
+        const midpoint = street.path[midIdx];
+        if (!midpoint) return;
+        markerCoords = [midpoint[0], midpoint[1]];
+      }
 
       // Create marker element
       const el = document.createElement('div');
@@ -331,7 +374,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       `);
 
       const marker = new mapboxgl.Marker(el)
-        .setLngLat([midpoint[0], midpoint[1]])
+        .setLngLat(markerCoords)
         .setPopup(popup)
         .addTo(map);
 
@@ -343,6 +386,13 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       markersRef.current = [];
     };
   }, [mapInstance, geometry, activeIncidents]);
+
+  // Handle report mode cursor on canvas
+  useEffect(() => {
+    const map = mapInstance;
+    if (!map) return;
+    map.getCanvas().style.cursor = isReportMode ? 'crosshair' : '';
+  }, [isReportMode, mapInstance]);
 
 
   if (!mapboxToken) {

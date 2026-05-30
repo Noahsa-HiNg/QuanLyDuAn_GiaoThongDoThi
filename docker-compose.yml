@@ -56,7 +56,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8501:8501"
+      - "8502:8501"
     depends_on:
       backend:
         condition: service_started

@@ -221,6 +221,9 @@ def create_incident(
         description=payload.description,
         status=payload.status,
         is_active=payload.is_active,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        officer_id=payload.officer_id,
         created_by=current_user.id,  # Tự động gán ID của CSGT đang đăng nhập
     )
     db.add(new_incident)

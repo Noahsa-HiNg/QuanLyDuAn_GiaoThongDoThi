@@ -22,11 +22,13 @@ Endpoints:
 
 from typing import Optional
 from datetime import datetime, timezone, timedelta
+import io
 import json
 import threading
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session, joinedload
 
@@ -648,6 +650,69 @@ def get_traffic_current_by_street(
         segments_data = segments_data,
         full_path     = path_data,
         centroid      = centroid.get(street_id),
+    )
+
+
+@router.get(
+    "/export/traffic",
+    summary="Xuất CSV traffic theo ngày",
+    response_class=StreamingResponse,
+)
+def export_traffic(
+    date: str = Query(..., description="Ngày theo định dạng YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """Trả file CSV các bản ghi traffic trong ngày được chỉ định."""
+    try:
+        query_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Ngày không hợp lệ. Vui lòng dùng định dạng YYYY-MM-DD.",
+        )
+
+    rows = db.execute(text("""
+        SELECT
+            td.id,
+            td.street_id,
+            s.name AS street_name,
+            d.name AS district_name,
+            td.segment_idx,
+            td.avg_speed,
+            td.free_flow_speed,
+            td.congestion_level,
+            td.source,
+            (td.timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') AS timestamp
+        FROM traffic_data td
+        LEFT JOIN streets s ON td.street_id = s.id
+        LEFT JOIN districts d ON s.district_id = d.id
+        WHERE (td.timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = :query_date
+        ORDER BY td.timestamp ASC, td.street_id, td.segment_idx
+    """), {"query_date": query_date}).fetchall()
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail="Không có dữ liệu traffic cho ngày được chọn.",
+        )
+
+    df = pd.DataFrame([dict(row) for row in rows])
+    if not df.empty and "timestamp" in df.columns:
+        df["timestamp"] = df["timestamp"].apply(
+            lambda ts: ts.strftime("%Y-%m-%d %H:%M:%S") if ts is not None else ""
+        )
+
+    stream = io.StringIO()
+    df.to_csv(stream, index=False, encoding="utf-8-sig")
+    stream.seek(0)
+
+    headers = {
+        "Content-Disposition": f"attachment; filename=traffic_{date}.csv"
+    }
+    return StreamingResponse(
+        iter([stream.getvalue()]),
+        media_type="text/csv",
+        headers=headers,
     )
 
 

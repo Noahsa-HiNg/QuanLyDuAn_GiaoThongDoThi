@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { incidentsApi } from '../../api/incidents.api';
+import { usersApi } from '../../api/users.api';
 import { useIncidentStore } from '../../store/incidentStore';
 import { useAuthStore } from '../../store/authStore';
 import { useGeometry } from '../../hooks/useGeometry';
@@ -18,11 +19,12 @@ import {
 } from 'lucide-react';
 import { fmtTimestampVN } from '../../utils/formatters';
 
-const SEVERITIES = [
-  { label: 'Thấp (Nhẹ)', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
-  { label: 'Trung bình', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
-  { label: 'Cao (Kẹt cứng)', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
-];
+const SEVERITIES: Record<number, { label: string; color: string }> = {
+  0: { label: 'Thấp (Nhẹ)', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
+  1: { label: 'Thấp (Nhẹ)', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
+  2: { label: 'Trung bình', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  3: { label: 'Cao (Kẹt cứng)', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+};
 
 const INCIDENT_TYPES = {
   accident: { label: 'Tai nạn', color: 'bg-red-500/15 text-red-300 border-red-500/20' },
@@ -45,10 +47,18 @@ const Incidents: React.FC = () => {
   const { selectedIncidentIds, filters, toggleSelectIncident, selectAllIncidents, clearSelection, setFilter } = useIncidentStore();
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<number[]>([]);
+
+  const toggleExpand = (id: number) => {
+    setExpandedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
   const [streetQuery, setStreetQuery] = useState('');
   const [streetSuggestions, setStreetSuggestions] = useState<any[]>([]);
   const [selectedStreetId, setSelectedStreetId] = useState<number | null>(null);
   const [selectedStreetName, setSelectedStreetName] = useState('');
+  const [selectedOfficerId, setSelectedOfficerId] = useState<number | null>(null);
 
   // Form states
   const [type, setType] = useState<'accident' | 'roadblock' | 'event' | 'community'>('accident');
@@ -70,6 +80,12 @@ const Incidents: React.FC = () => {
   });
 
   const { data: geometry } = useGeometry();
+
+  // Fetch active CSGT officers
+  const { data: officers = [] } = useQuery({
+    queryKey: ['activeOfficers'],
+    queryFn: () => usersApi.getOfficers(),
+  });
 
   // Mutations
   const createIncidentMutation = useMutation({
@@ -146,6 +162,7 @@ const Incidents: React.FC = () => {
       description,
       status,
       is_active: status !== 'resolved',
+      officer_id: selectedOfficerId,
     });
   };
 
@@ -170,6 +187,7 @@ const Incidents: React.FC = () => {
     setSeverity(1);
     setDescription('');
     setStatus('active');
+    setSelectedOfficerId(null);
     setFormError(null);
   };
 
@@ -328,7 +346,7 @@ const Incidents: React.FC = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-950/80 border-b border-white/10 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="px-6 py-4 w-12 text-center">
+                  <th className="px-4 py-3 w-12 text-center">
                     <button onClick={toggleSelectAll} className="text-slate-400 hover:text-white cursor-pointer transition">
                       {selectedIncidentIds.length === incidents.length ? (
                         <CheckSquare size={16} />
@@ -337,13 +355,14 @@ const Incidents: React.FC = () => {
                       )}
                     </button>
                   </th>
-                  <th className="px-6 py-4">Tên đường</th>
-                  <th className="px-6 py-4">Loại</th>
-                  <th className="px-6 py-4">Nghiêm trọng</th>
-                  <th className="px-6 py-4">Mô tả chi tiết</th>
-                  <th className="px-6 py-4">Trạng thái</th>
-                  <th className="px-6 py-4">Thời gian tạo</th>
-                  {isAdmin && <th className="px-6 py-4 w-16 text-center">Xóa</th>}
+                  <th className="px-4 py-3">Tên đường</th>
+                  <th className="px-4 py-3">Loại</th>
+                  <th className="px-4 py-3">Nghiêm trọng</th>
+                  <th className="px-4 py-3">Mô tả chi tiết</th>
+                  <th className="px-4 py-3">Chiến sĩ</th>
+                  <th className="px-4 py-3">Trạng thái</th>
+                  <th className="px-4 py-3">Thời gian tạo</th>
+                  {isAdmin && <th className="px-4 py-3 w-16 text-center">Xóa</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -358,7 +377,7 @@ const Incidents: React.FC = () => {
                       key={`incident-row-${incident.id}`}
                       className={`hover:bg-white/5 transition ${isChecked ? 'bg-blue-500/10' : ''}`}
                     >
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => toggleSelectIncident(incident.id)}
                           className="text-slate-400 hover:text-blue-400 transition cursor-pointer"
@@ -370,37 +389,61 @@ const Incidents: React.FC = () => {
                           )}
                         </button>
                       </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-slate-200 flex items-center gap-1">
-                          <MapPin size={12} className="text-slate-400" />
-                          {getStreetName(incident.street_id)}
+                      <td className="px-4 py-3 min-w-[120px] max-w-[180px] break-words">
+                        <span className="text-xs font-bold text-slate-200 flex items-start gap-1">
+                          <MapPin size={12} className="text-slate-400 mt-0.5 shrink-0" />
+                          <span>{getStreetName(incident.street_id)}</span>
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${typeInfo.color}`}>
                           {typeInfo.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${sevInfo.color}`}>
                           {sevInfo.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
-                        <p className="text-xs text-slate-300 max-w-xs truncate" title={incident.description}>
-                          {incident.description}
-                        </p>
+                      <td className="px-4 py-3 min-w-[150px] max-w-[240px] break-words">
+                        {incident.description ? (
+                          <div>
+                            <p className={`text-xs text-slate-300 ${expandedIds.includes(incident.id) ? '' : 'line-clamp-2'}`}>
+                              {incident.description}
+                            </p>
+                            {incident.description.length > 45 && (
+                              <button
+                                onClick={() => toggleExpand(incident.id)}
+                                className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold mt-1 cursor-pointer transition focus:outline-none"
+                              >
+                                {expandedIds.includes(incident.id) ? 'Thu gọn' : 'Xem thêm'}
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-500 italic text-xs">-</span>
+                        )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs">
+                        {(() => {
+                          const assignedOfficer = officers.find((off: any) => off.id === incident.officer_id);
+                          return assignedOfficer ? (
+                            <span className="text-slate-200 font-medium">{assignedOfficer.full_name}</span>
+                          ) : (
+                            <span className="text-slate-500 font-medium italic">Chưa phân công</span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${statusInfo.color}`}>
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-slate-400">
+                      <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
                         {fmtTimestampVN(incident.start_time)}
                       </td>
                       {isAdmin && (
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-4 py-3 text-center">
                           <button
                             onClick={() => {
                               if (window.confirm('Bạn có chắc chắn muốn xóa sự cố này?')) {
@@ -541,6 +584,30 @@ const Incidents: React.FC = () => {
                   <option value="active">⚠️ Đang xảy ra</option>
                   <option value="dispatched">🚔 Đã điều tuần tra</option>
                   <option value="resolved">✅ Đã giải quyết</option>
+                </select>
+              </div>
+
+              {/* Officer Assignment */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Chiến sĩ được phân công
+                </label>
+                <select
+                  value={selectedOfficerId || ''}
+                  onChange={(e: any) => setSelectedOfficerId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">-- Chưa phân công --</option>
+                  {officers.map((off: any) => {
+                    const busy = (incidents ?? []).some(
+                      (inc) => inc.officer_id === off.id && inc.status !== 'resolved'
+                    );
+                    return (
+                      <option key={off.id} value={off.id}>
+                        {off.full_name} ({off.email}) {busy ? '🔴 [Đang bận]' : '🟢 [Sẵn sàng]'}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

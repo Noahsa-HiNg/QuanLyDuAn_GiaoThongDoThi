@@ -56,20 +56,29 @@ def retrain_model(db_session=None) -> dict:
     grid_search.fit(X_train_scaled, y_train)
     best_model = grid_search.best_estimator_
 
-    # Evaluate
-    y_pred = best_model.predict(X_test_scaled)
-    acc = accuracy_score(y_test, y_pred)
-    f1  = f1_score(y_test, y_pred, average="weighted")
+    # Evaluate — train set
+    y_train_pred = best_model.predict(X_train_scaled)
+    train_acc  = accuracy_score(y_train, y_train_pred)
+    train_f1   = f1_score(y_train, y_train_pred, average="weighted")
+    train_rmse = float(np.sqrt(np.mean((y_train - y_train_pred) ** 2)))
 
-    # RMSE on numeric congestion level
-    rmse = float(np.sqrt(np.mean((y_test - y_pred) ** 2)))
+    # Evaluate — test set
+    y_pred = best_model.predict(X_test_scaled)
+    acc    = accuracy_score(y_test, y_pred)
+    f1     = f1_score(y_test, y_pred, average="weighted")
+    rmse   = float(np.sqrt(np.mean((y_test - y_pred) ** 2)))
 
     print(f"  → Best params: {grid_search.best_params_}")
-    print(f"  → Accuracy: {acc:.3f} | F1: {f1:.3f} | RMSE: {rmse:.3f}")
+    print(f"  → [Train] Accuracy: {train_acc:.3f} | F1: {train_f1:.3f} | RMSE: {train_rmse:.3f}")
+    print(f"  → [Test]  Accuracy: {acc:.3f}       | F1: {f1:.3f}       | RMSE: {rmse:.3f}")
 
     # Kiểm tra ngưỡng
     if f1 < 0.70:
         print(f"  ⚠️  WARNING: F1={f1:.3f} < 0.70 — model chưa đạt ngưỡng!")
+
+    # Overfit detection
+    if train_f1 - f1 > 0.10:
+        print(f"  ⚠️  WARNING: Overfit — Train F1={train_f1:.3f} vs Test F1={f1:.3f} (gap={train_f1 - f1:.3f})")
 
     # Feature importance log
     importances = best_model.feature_importances_
@@ -85,9 +94,16 @@ def retrain_model(db_session=None) -> dict:
 
     # Lưu metrics
     metrics = {
-        "accuracy":     round(acc, 4),
-        "f1_weighted":  round(f1, 4),
-        "rmse":         round(rmse, 4),
+        "train": {
+            "accuracy":    round(train_acc, 4),
+            "f1_weighted": round(train_f1, 4),
+            "rmse":        round(train_rmse, 4),
+        },
+        "test": {
+            "accuracy":    round(acc, 4),
+            "f1_weighted": round(f1, 4),
+            "rmse":        round(rmse, 4),
+        },
         "best_params":  grid_search.best_params_,
         "n_train":      len(X_train),
         "n_test":       len(X_test),
@@ -115,7 +131,11 @@ def retrain_and_reload(db_session=None) -> dict:
     try:
         # Bước 1: Train lại model
         metrics = retrain_model(db_session)
-        logger.info(f"✅ [AutoRetrain] Train xong — F1={metrics['f1_weighted']:.3f}")
+        logger.info(
+            f"✅ [AutoRetrain] Train xong — "
+            f"Train F1={metrics['train']['f1_weighted']:.3f} | "
+            f"Test F1={metrics['test']['f1_weighted']:.3f}"
+        )
 
         # Bước 2: Hot-reload vào PredictionService (không restart server)
         try:

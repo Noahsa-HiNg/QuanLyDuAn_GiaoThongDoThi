@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+from datetime import date
 
 from shared.utils.css_loader import setup_ui
 from shared.utils.auth_guard import require_login
@@ -22,6 +23,7 @@ from shared.components.sidebar import render_sidebar
 from shared.api.client import (
     get_predictions, get_hourly_trend,
     get_heatmap_data, get_report,
+    get_traffic_csv,
 )
 from config import APP_TITLE, APP_VERSION
 
@@ -217,6 +219,27 @@ with st.sidebar:
         key="sidebar_district",
         label_visibility="collapsed",
     )
+
+    st.markdown('<p style="font-size:0.78rem;color:#94a3b8;margin:10px 0 4px">📥 Xuất CSV Traffic</p>',
+                unsafe_allow_html=True)
+    export_date = st.date_input(
+        "Ngày xuất CSV",
+        value=date.today(),
+        key="sidebar_export_date",
+        label_visibility="collapsed",
+    )
+    if st.button("⬇️ Xuất CSV", use_container_width=True):
+        csv_bytes = get_traffic_csv(export_date.isoformat())
+        if csv_bytes:
+            st.download_button(
+                label="Tải file traffic",
+                data=csv_bytes,
+                file_name=f"traffic_{export_date.isoformat()}.csv",
+                mime="text/csv",
+                key="download_traffic_csv"
+            )
+        else:
+            st.error("Không tải được CSV. Vui lòng thử lại hoặc kiểm tra backend.")
 
     st.divider()
 

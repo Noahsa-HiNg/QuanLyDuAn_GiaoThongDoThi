@@ -13,6 +13,9 @@ class IncidentBase(BaseModel):
     description: Optional[str] = Field(None, description="Mô tả chi tiết sự cố")
     status: str = Field("active", description="Trạng thái: active (đang xảy ra), dispatched (đã cử người xử lý), resolved (đã giải quyết)")
     is_active: bool = Field(True, description="Cờ đánh dấu sự cố đang còn hiệu lực")
+    latitude: Optional[float] = Field(None, description="Vĩ độ xảy ra sự cố")
+    longitude: Optional[float] = Field(None, description="Kinh độ xảy ra sự cố")
+    officer_id: Optional[int] = Field(None, description="ID CSGT được phân công tuần tra")
 
     @field_validator("type")
     @classmethod
@@ -46,6 +49,9 @@ class IncidentUpdate(BaseModel):
     description: Optional[str] = None
     status: Optional[str] = None
     is_active: Optional[bool] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    officer_id: Optional[int] = None
 
     @field_validator("type")
     @classmethod

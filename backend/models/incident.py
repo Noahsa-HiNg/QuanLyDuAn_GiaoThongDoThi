@@ -13,8 +13,10 @@ Dùng làm feature đầu vào cho AI model:
 """
 
 from sqlalchemy import (
+
     Column, Integer, String, Boolean, Text,
     ForeignKey, Index, CheckConstraint, TIMESTAMP, UniqueConstraint
+
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -78,6 +80,13 @@ class Incident(Base):
     # FK → user tạo incident (CSGT hoặc NULL nếu tự động từ community/here_api)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
+    # Tọa độ GPS cụ thể của điểm xảy ra sự cố (nếu có)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
+    # FK -> CSGT được phân công tuần tra
+    officer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
     # Thời điểm tạo record
     created_at = Column(
         TIMESTAMP(timezone=True),
@@ -113,6 +122,8 @@ class Incident(Base):
     # foreign_keys chỉ định rõ khi có nhiều FK cùng trỏ về 1 bảng
     created_by_user = relationship("User", back_populates="incidents",
                                     foreign_keys=[created_by])
+    
+    officer = relationship("User", foreign_keys=[officer_id])
 
     def __repr__(self):
         return (

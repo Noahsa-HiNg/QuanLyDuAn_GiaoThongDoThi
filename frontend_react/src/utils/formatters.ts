@@ -10,7 +10,7 @@ export function fmtTimestampVN(iso: string | null | undefined): string {
     const hh = String(vnTime.getUTCHours()).padStart(2, '0');
     const min = String(vnTime.getUTCMinutes()).padStart(2, '0');
     const ss = String(vnTime.getUTCSeconds()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss} +07`;
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
   } catch (e) {
     return 'N/A';
   }
