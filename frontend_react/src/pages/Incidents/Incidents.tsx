@@ -19,22 +19,22 @@ import {
 import { fmtTimestampVN } from '../../utils/formatters';
 
 const SEVERITIES = [
-  { label: 'Thấp (Nhẹ)', color: 'bg-green-50 text-green-700 border-green-200' },
-  { label: 'Trung bình', color: 'bg-amber-50 text-amber-600 border-amber-200' },
-  { label: 'Cao (Kẹt cứng)', color: 'bg-red-50 text-red-600 border-red-200' },
+  { label: 'Thấp (Nhẹ)', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
+  { label: 'Trung bình', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  { label: 'Cao (Kẹt cứng)', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
 ];
 
 const INCIDENT_TYPES = {
-  accident: { label: 'Tai nạn', color: 'bg-red-100 text-red-800' },
-  roadblock: { label: 'Cản trở', color: 'bg-amber-100 text-amber-800' },
-  event: { label: 'Sự kiện', color: 'bg-blue-100 text-blue-800' },
-  community: { label: 'Cộng đồng', color: 'bg-purple-100 text-purple-800' },
+  accident: { label: 'Tai nạn', color: 'bg-red-500/15 text-red-300 border-red-500/20' },
+  roadblock: { label: 'Cản trở', color: 'bg-amber-500/15 text-amber-300 border-amber-500/20' },
+  event: { label: 'Sự kiện', color: 'bg-blue-500/15 text-blue-300 border-blue-500/20' },
+  community: { label: 'Cộng đồng', color: 'bg-purple-500/15 text-purple-300 border-purple-500/20' },
 };
 
 const STATUSES = {
-  active: { label: 'Đang xảy ra', color: 'bg-red-50 text-red-700 border-red-200' },
-  dispatched: { label: 'Đã điều động', color: 'bg-blue-50 text-blue-600 border-blue-200' },
-  resolved: { label: 'Đã giải quyết', color: 'bg-green-50 text-green-600 border-green-200' },
+  active: { label: 'Đang xảy ra', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
+  dispatched: { label: 'Đã điều động', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
+  resolved: { label: 'Đã giải quyết', color: 'bg-green-500/10 text-green-400 border-green-500/20' },
 };
 
 const Incidents: React.FC = () => {
@@ -189,15 +189,15 @@ const Incidents: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-10 px-4 md:px-8 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen pt-20 pb-10 px-4 md:px-8 max-w-7xl mx-auto space-y-6">
       {/* Header section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
-            <AlertCircle className="text-red-500" />
+          <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
+            <AlertCircle className="text-red-400" />
             Quản lý Sự cố Giao thông
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-slate-400 mt-1">
             Danh sách tai nạn, cản trở đường và các sự kiện ảnh hưởng tới lưu lượng giao thông toàn thành phố.
           </p>
         </div>
@@ -208,14 +208,14 @@ const Incidents: React.FC = () => {
               clearSelection();
               queryClient.invalidateQueries({ queryKey: ['incidents'] });
             }}
-            className="p-2 border border-gray-200 bg-white rounded-lg text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+            className="p-2 border border-white/10 bg-slate-900/60 rounded-lg text-slate-400 hover:bg-white/5 transition cursor-pointer"
             title="Tải lại danh sách"
           >
             <RefreshCw size={16} className={isRefetching ? 'animate-spin' : ''} />
           </button>
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition flex items-center gap-1.5 shadow-sm cursor-pointer"
           >
             <Plus size={16} /> Báo cáo sự cố
           </button>
@@ -223,16 +223,16 @@ const Incidents: React.FC = () => {
       </div>
 
       {/* Grid Filters Panel */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-xl p-4 shadow-2xl grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Type Filter */}
         <div>
-          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
             Loại sự cố
           </label>
           <select
             value={filters.type}
             onChange={(e) => setFilter('type', e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+            className="w-full bg-slate-950/60 text-slate-300 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
             <option value="all">Tất cả loại sự cố</option>
             <option value="accident">Tai nạn</option>
@@ -244,13 +244,13 @@ const Incidents: React.FC = () => {
 
         {/* Status Filter */}
         <div>
-          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
             Trạng thái xử lý
           </label>
           <select
             value={filters.status}
             onChange={(e) => setFilter('status', e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+            className="w-full bg-slate-950/60 text-slate-300 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="active">Đang diễn ra</option>
@@ -261,7 +261,7 @@ const Incidents: React.FC = () => {
 
         {/* Active state filter */}
         <div>
-          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
             Hiệu lực hoạt động
           </label>
           <select
@@ -270,7 +270,7 @@ const Incidents: React.FC = () => {
               const val = e.target.value;
               setFilter('isActive', val === 'all' ? null : val === 'true');
             }}
-            className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+            className="w-full bg-slate-950/60 text-slate-300 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
             <option value="all">Tất cả hiệu lực</option>
             <option value="true">Chỉ sự cố đang hoạt động</option>
@@ -281,35 +281,35 @@ const Incidents: React.FC = () => {
 
       {/* Batch Operation Action Panel (Shows only if items are selected) */}
       {selectedIncidentIds.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm animate-fade-in">
-          <div className="flex items-center gap-2 text-blue-700 text-xs font-bold">
+        <div className="bg-blue-950/40 border border-blue-500/30 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xl animate-fade-in text-blue-300">
+          <div className="flex items-center gap-2 text-blue-400 text-xs font-bold">
             <CheckSquare size={16} />
             Đã chọn {selectedIncidentIds.length} sự cố
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => handleBatchStatusUpdate('resolved')}
-              className="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow transition flex items-center gap-1 cursor-pointer"
+              className="bg-green-600 hover:bg-green-500 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-sm transition flex items-center gap-1 cursor-pointer"
             >
               <Check size={14} /> Xác nhận đã giải quyết
             </button>
             <button
               onClick={() => handleBatchStatusUpdate('dispatched')}
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow transition flex items-center gap-1 cursor-pointer"
+              className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-sm transition flex items-center gap-1 cursor-pointer"
             >
               🚔 Đã điều động CSGT
             </button>
             {isAdmin && (
               <button
                 onClick={handleBatchDelete}
-                className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow transition flex items-center gap-1 cursor-pointer"
+                className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-1.5 px-3 rounded-lg shadow-sm transition flex items-center gap-1 cursor-pointer"
               >
                 <Trash2 size={14} /> Xóa sự cố chọn
               </button>
             )}
             <button
               onClick={clearSelection}
-              className="border border-gray-300 text-gray-600 text-xs font-semibold py-1.5 px-3 bg-white hover:bg-gray-50 rounded-lg cursor-pointer"
+              className="border border-white/10 text-slate-400 text-xs font-semibold py-1.5 px-3 bg-slate-900 hover:bg-white/5 rounded-lg cursor-pointer transition"
             >
               Hủy
             </button>
@@ -318,18 +318,18 @@ const Incidents: React.FC = () => {
       )}
 
       {/* Incidents Table list */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500 animate-pulse text-sm">
+          <div className="p-8 text-center text-slate-400 animate-pulse text-sm">
             Đang tải danh sách sự cố giao thông...
           </div>
         ) : incidents.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                <tr className="bg-slate-950/80 border-b border-white/10 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-6 py-4 w-12 text-center">
-                    <button onClick={toggleSelectAll} className="text-gray-500 hover:text-gray-800 cursor-pointer">
+                    <button onClick={toggleSelectAll} className="text-slate-400 hover:text-white cursor-pointer transition">
                       {selectedIncidentIds.length === incidents.length ? (
                         <CheckSquare size={16} />
                       ) : (
@@ -346,33 +346,33 @@ const Incidents: React.FC = () => {
                   {isAdmin && <th className="px-6 py-4 w-16 text-center">Xóa</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-white/5">
                 {incidents.map((incident) => {
                   const isChecked = selectedIncidentIds.includes(incident.id);
-                  const typeInfo = INCIDENT_TYPES[incident.type as keyof typeof INCIDENT_TYPES] || { label: incident.type, color: 'bg-gray-100 text-gray-800' };
-                  const sevInfo = SEVERITIES[incident.severity] || { label: 'Khác', color: 'bg-gray-50 text-gray-500' };
-                  const statusInfo = STATUSES[incident.status as keyof typeof STATUSES] || { label: incident.status, color: 'bg-gray-50 text-gray-500' };
+                  const typeInfo = INCIDENT_TYPES[incident.type as keyof typeof INCIDENT_TYPES] || { label: incident.type, color: 'bg-slate-800 text-slate-300' };
+                  const sevInfo = SEVERITIES[incident.severity] || { label: 'Khác', color: 'bg-slate-800 text-slate-400' };
+                  const statusInfo = STATUSES[incident.status as keyof typeof STATUSES] || { label: incident.status, color: 'bg-slate-800 text-slate-400' };
 
                   return (
                     <tr
                       key={`incident-row-${incident.id}`}
-                      className={`hover:bg-gray-50/50 transition ${isChecked ? 'bg-blue-50/20' : ''}`}
+                      className={`hover:bg-white/5 transition ${isChecked ? 'bg-blue-500/10' : ''}`}
                     >
                       <td className="px-6 py-4 text-center">
                         <button
                           onClick={() => toggleSelectIncident(incident.id)}
-                          className="text-gray-400 hover:text-blue-600 transition cursor-pointer"
+                          className="text-slate-400 hover:text-blue-400 transition cursor-pointer"
                         >
                           {isChecked ? (
-                            <CheckSquare className="text-blue-600" size={16} />
+                            <CheckSquare className="text-blue-400" size={16} />
                           ) : (
                             <Square size={16} />
                           )}
                         </button>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-gray-800 flex items-center gap-1">
-                          <MapPin size={12} className="text-gray-400" />
+                        <span className="text-xs font-bold text-slate-200 flex items-center gap-1">
+                          <MapPin size={12} className="text-slate-400" />
                           {getStreetName(incident.street_id)}
                         </span>
                       </td>
@@ -387,7 +387,7 @@ const Incidents: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-xs text-gray-600 max-w-xs truncate" title={incident.description}>
+                        <p className="text-xs text-slate-300 max-w-xs truncate" title={incident.description}>
                           {incident.description}
                         </p>
                       </td>
@@ -396,7 +396,7 @@ const Incidents: React.FC = () => {
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-gray-400">
+                      <td className="px-6 py-4 text-xs text-slate-400">
                         {fmtTimestampVN(incident.start_time)}
                       </td>
                       {isAdmin && (
@@ -407,7 +407,7 @@ const Incidents: React.FC = () => {
                                 deleteIncidentsMutation.mutate([incident.id]);
                               }
                             }}
-                            className="text-red-500 hover:text-red-700 transition cursor-pointer"
+                            className="text-red-400 hover:text-red-300 transition cursor-pointer"
                             title="Xóa sự cố"
                           >
                             <Trash2 size={15} />
@@ -421,7 +421,7 @@ const Incidents: React.FC = () => {
             </table>
           </div>
         ) : (
-          <div className="p-10 text-center text-gray-400 text-xs flex flex-col items-center justify-center gap-2">
+          <div className="p-10 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
             <Info size={24} />
             Không tìm thấy sự cố giao thông nào khớp bộ lọc.
           </div>
@@ -430,12 +430,12 @@ const Incidents: React.FC = () => {
 
       {/* 5. Create Incident Modal Overlay */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden text-white">
             {/* Header */}
-            <div className="bg-gray-50 border-b px-5 py-4 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
-                <AlertCircle className="text-red-500" size={18} />
+            <div className="bg-slate-950/60 border-b border-white/10 px-5 py-4 flex items-center justify-between">
+              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <AlertCircle className="text-red-400" size={18} />
                 Báo cáo sự cố mới
               </h4>
               <button
@@ -443,23 +443,23 @@ const Incidents: React.FC = () => {
                   setIsCreateModalOpen(false);
                   resetForm();
                 }}
-                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                className="text-slate-400 hover:text-white cursor-pointer transition"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleCreateSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleCreateSubmit} className="p-5 space-y-4 bg-slate-900/60">
               {formError && (
-                <div className="p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold">
+                <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 rounded-lg text-xs font-semibold">
                   ⚠️ {formError}
                 </div>
               )}
 
               {/* Target Street autocomplete search */}
               <div className="relative">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Đường phố kẹt/sự cố
                 </label>
                 <div className="relative flex items-center">
@@ -468,24 +468,24 @@ const Incidents: React.FC = () => {
                     value={streetQuery}
                     placeholder="Gõ tìm đường phố..."
                     onChange={(e) => handleStreetSearch(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                     required
                   />
                   {selectedStreetName && (
-                    <span className="absolute right-2 text-[10px] font-bold bg-green-50 text-green-600 border border-green-200 px-1.5 py-0.5 rounded">
+                    <span className="absolute right-2 text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded">
                       Đã chọn
                     </span>
                   )}
                 </div>
                 {/* Suggestions list */}
                 {streetSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[200] max-h-40 overflow-y-auto">
+                  <div className="absolute left-0 right-0 mt-1 bg-slate-950 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-40 overflow-y-auto">
                     {streetSuggestions.map((st) => (
                       <button
                         key={`modal-street-${st.street_id}`}
                         type="button"
                         onClick={() => handleSelectStreet(st)}
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b border-gray-100 last:border-b-0 cursor-pointer"
+                        className="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-white/5 border-b border-white/5 last:border-b-0 cursor-pointer"
                       >
                         {st.street_name}
                       </button>
@@ -497,13 +497,13 @@ const Incidents: React.FC = () => {
               {/* Type and Severity */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                     Loại sự cố
                   </label>
                   <select
                     value={type}
                     onChange={(e: any) => setType(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                   >
                     <option value="accident">Tai nạn giao thông</option>
                     <option value="roadblock">Cản trở/Công trình</option>
@@ -513,13 +513,13 @@ const Incidents: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                     Độ nghiêm trọng
                   </label>
                   <select
                     value={severity}
                     onChange={(e: any) => setSeverity(Number(e.target.value))}
-                    className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                   >
                     <option value={0}>Thấp (Chậm nhẹ)</option>
                     <option value={1}>Trung bình</option>
@@ -530,13 +530,13 @@ const Incidents: React.FC = () => {
 
               {/* Status */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Trạng thái sự cố
                 </label>
                 <select
                   value={status}
                   onChange={(e: any) => setStatus(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                 >
                   <option value="active">⚠️ Đang xảy ra</option>
                   <option value="dispatched">🚔 Đã điều tuần tra</option>
@@ -546,7 +546,7 @@ const Incidents: React.FC = () => {
 
               {/* Description */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Mô tả chi tiết
                 </label>
                 <textarea
@@ -554,27 +554,27 @@ const Incidents: React.FC = () => {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
                   placeholder="Mô tả cụ thể sự việc..."
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   required
                 />
               </div>
 
               {/* Buttons */}
-              <div className="pt-2 flex justify-end gap-2 border-t mt-4">
+              <div className="pt-2 flex justify-end gap-2 border-t border-white/10 mt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setIsCreateModalOpen(false);
                     resetForm();
                   }}
-                  className="px-4 py-2 border rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 cursor-pointer"
+                  className="px-4 py-2 border border-white/10 rounded-lg text-xs font-semibold text-slate-400 hover:bg-white/5 transition cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
                   disabled={createIncidentMutation.isPending}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {createIncidentMutation.isPending ? 'Đang tạo...' : 'Tạo báo cáo'}
                 </button>

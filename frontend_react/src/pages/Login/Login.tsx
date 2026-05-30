@@ -57,18 +57,18 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-slate-900/60 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10 p-8 text-white">
         {/* Title */}
         <div className="text-center mb-8">
           <span className="text-4xl">🚦</span>
-          <h2 className="text-2xl font-extrabold text-gray-900 mt-3">Đăng nhập Hệ thống</h2>
-          <p className="text-sm text-gray-500 mt-1">Cơ sở dữ liệu & Phân tích giao thông đô thị</p>
+          <h2 className="text-2xl font-extrabold text-white mt-3">Đăng nhập Hệ thống</h2>
+          <p className="text-sm text-slate-400 mt-1">Cơ sở dữ liệu & Phân tích giao thông đô thị</p>
         </div>
 
         {/* Error alert */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2 mb-6">
+          <div className="bg-red-950/40 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center gap-2 mb-6">
             <AlertCircle size={18} className="shrink-0" />
             <span>{error}</span>
           </div>
@@ -77,11 +77,11 @@ const Login: React.FC = () => {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
               Địa chỉ Email
             </label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 pointer-events-none">
                 <Mail size={18} />
               </span>
               <input
@@ -89,18 +89,18 @@ const Login: React.FC = () => {
                 placeholder="csgt@danang.gov.vn"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full bg-slate-950/60 border border-white/10 text-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
               Mật khẩu
             </label>
             <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 pointer-events-none">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500 pointer-events-none">
                 <Lock size={18} />
               </span>
               <input
@@ -108,13 +108,13 @@ const Login: React.FC = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-gray-200 rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full bg-slate-950/60 border border-white/10 text-slate-200 rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 cursor-pointer"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-350 cursor-pointer"
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -124,12 +124,12 @@ const Login: React.FC = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl text-sm transition shadow-md shadow-blue-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 hover:bg-blue-550 text-white font-bold py-3 px-4 rounded-xl text-sm transition shadow-lg shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                Đang đăng nhập...
+                Đăng nhập...
               </>
             ) : (
               'Đăng nhập'

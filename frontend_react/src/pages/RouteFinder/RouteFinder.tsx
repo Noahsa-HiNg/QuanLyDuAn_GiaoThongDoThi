@@ -160,15 +160,15 @@ const RouteFinder: React.FC = () => {
   return (
     <div className="w-full h-[calc(100vh-64px)] mt-16 flex flex-col md:flex-row overflow-hidden">
       {/* 1. Left Form Panel */}
-      <div className="w-full md:w-[420px] bg-white border-r border-gray-200 shadow-sm flex flex-col h-full overflow-y-auto">
+      <div className="w-full md:w-[420px] bg-slate-950/80 backdrop-blur-md border-r border-white/10 shadow-2xl flex flex-col h-full overflow-y-auto text-white">
         <div className="p-5 flex-grow">
           {/* Header */}
           <div className="mb-6">
-            <h1 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
+            <h1 className="text-xl font-extrabold text-white flex items-center gap-2">
               <span className="text-2xl">🗺️</span>
               Tìm đường thông minh
             </h1>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               Thuật toán A* tối ưu hóa thời gian và khoảng cách đi lại tại Đà Nẵng.
             </p>
           </div>
@@ -177,7 +177,7 @@ const RouteFinder: React.FC = () => {
           <div className="space-y-4 relative">
             {/* Start Point */}
             <div className="relative">
-              <label className="block text-[10px] font-bold tracking-wider text-green-600 uppercase mb-1 flex items-center gap-1">
+              <label className="block text-[10px] font-bold tracking-wider text-green-400 uppercase mb-1 flex items-center gap-1">
                 <MapPin size={10} /> Điểm xuất phát
               </label>
               <div className="relative flex items-center">
@@ -194,7 +194,7 @@ const RouteFinder: React.FC = () => {
                       setFromName
                     )
                   }
-                  className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-3 pr-8 py-2 text-sm bg-slate-900/60 border border-white/10 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 />
                 {fromQuery && (
                   <button
@@ -204,7 +204,7 @@ const RouteFinder: React.FC = () => {
                       setFromName('');
                       clearRoute();
                     }}
-                    className="absolute right-2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    className="absolute right-2 text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
                     ✕
                   </button>
@@ -212,7 +212,7 @@ const RouteFinder: React.FC = () => {
               </div>
               {/* Autocomplete Suggestions */}
               {fromSuggestions.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[200] max-h-48 overflow-y-auto">
+                <div className="absolute left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-48 overflow-y-auto">
                   {fromSuggestions.map((street) => (
                     <button
                       key={`from-sug-${street.id}`}
@@ -225,10 +225,10 @@ const RouteFinder: React.FC = () => {
                           setFromName
                         )
                       }
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b last:border-b-0 border-gray-100 flex items-center justify-between cursor-pointer"
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 border-b last:border-b-0 border-white/5 flex items-center justify-between cursor-pointer text-slate-200"
                     >
-                      <span className="font-medium text-gray-800">{street.name}</span>
-                      <span className="text-[10px] text-gray-400">Midpoint</span>
+                      <span className="font-medium text-slate-200">{street.name}</span>
+                      <span className="text-[10px] text-slate-500">Midpoint</span>
                     </button>
                   ))}
                 </div>
@@ -240,7 +240,7 @@ const RouteFinder: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSwap}
-                className="p-1.5 bg-gray-50 border border-gray-300 rounded-full text-gray-500 hover:text-gray-800 hover:bg-gray-100 shadow-sm transition transform hover:rotate-180 duration-300 cursor-pointer"
+                className="p-1.5 bg-slate-900 border border-white/10 rounded-full text-slate-400 hover:text-slate-200 hover:bg-slate-800 shadow-sm transition transform hover:rotate-180 duration-300 cursor-pointer"
                 title="Hoán đổi điểm xuất phát và điểm đến"
               >
                 <ArrowUpDown size={14} />
@@ -249,7 +249,7 @@ const RouteFinder: React.FC = () => {
 
             {/* Destination Point */}
             <div className="relative">
-              <label className="block text-[10px] font-bold tracking-wider text-red-500 uppercase mb-1 flex items-center gap-1">
+              <label className="block text-[10px] font-bold tracking-wider text-red-400 uppercase mb-1 flex items-center gap-1">
                 <MapPin size={10} /> Điểm đến
               </label>
               <div className="relative flex items-center">
@@ -266,7 +266,7 @@ const RouteFinder: React.FC = () => {
                       setToName
                     )
                   }
-                  className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full pl-3 pr-8 py-2 text-sm bg-slate-900/60 border border-white/10 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 />
                 {toQuery && (
                   <button
@@ -276,7 +276,7 @@ const RouteFinder: React.FC = () => {
                       setToName('');
                       clearRoute();
                     }}
-                    className="absolute right-2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    className="absolute right-2 text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
                     ✕
                   </button>
@@ -284,7 +284,7 @@ const RouteFinder: React.FC = () => {
               </div>
               {/* Autocomplete Suggestions */}
               {toSuggestions.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[200] max-h-48 overflow-y-auto">
+                <div className="absolute left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-48 overflow-y-auto">
                   {toSuggestions.map((street) => (
                     <button
                       key={`to-sug-${street.id}`}
@@ -297,10 +297,10 @@ const RouteFinder: React.FC = () => {
                           setToName
                         )
                       }
-                      className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b last:border-b-0 border-gray-100 flex items-center justify-between cursor-pointer"
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-slate-800 border-b last:border-b-0 border-white/5 flex items-center justify-between cursor-pointer text-slate-200"
                     >
-                      <span className="font-medium text-gray-800">{street.name}</span>
-                      <span className="text-[10px] text-gray-400">Midpoint</span>
+                      <span className="font-medium text-slate-200">{street.name}</span>
+                      <span className="text-[10px] text-slate-500">Midpoint</span>
                     </button>
                   ))}
                 </div>
@@ -312,7 +312,7 @@ const RouteFinder: React.FC = () => {
               <button
                 onClick={handleFindRoute}
                 disabled={!fromPos || !toPos || isSearching}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg text-sm transition flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:opacity-50 text-white font-semibold py-2 px-4 rounded-lg text-sm transition flex items-center justify-center gap-1.5 shadow-sm disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSearching ? (
                   <>
@@ -332,7 +332,7 @@ const RouteFinder: React.FC = () => {
                   setToQuery('');
                   resetAll();
                 }}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                className="px-3 py-2 border border-white/10 rounded-lg text-slate-400 bg-slate-900 hover:bg-slate-800 hover:text-slate-200 transition cursor-pointer"
                 title="Đặt lại bộ lọc"
               >
                 <Trash2 size={16} />
@@ -342,11 +342,11 @@ const RouteFinder: React.FC = () => {
 
           {/* Hint Overlay Details */}
           {!hasResults && !searchError && (
-            <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-blue-700 text-xs">
+            <div className="mt-8 bg-blue-950/40 border border-blue-900/40 rounded-xl p-4 flex gap-3 text-blue-300 text-xs">
               <Info size={18} className="flex-shrink-0" />
               <div>
                 <p className="font-bold mb-1">Mẹo chọn điểm đi/đến:</p>
-                <ul className="list-disc pl-4 space-y-1">
+                <ul className="list-disc pl-4 space-y-1 text-slate-300">
                   <li>Gõ tên các tuyến đường chính (ví dụ: Lê Duẩn, Nguyễn Văn Linh).</li>
                   <li>Hoặc click trực tiếp lên bản đồ bên phải để cắm mốc xuất phát và đích.</li>
                 </ul>
@@ -356,7 +356,7 @@ const RouteFinder: React.FC = () => {
 
           {/* Error Message */}
           {searchError && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold">
+            <div className="mt-4 p-3 bg-red-950/40 border border-red-900/40 text-red-400 rounded-lg text-xs font-semibold">
               ⚠️ {searchError}
             </div>
           )}
@@ -364,7 +364,7 @@ const RouteFinder: React.FC = () => {
           {/* 3. Results Comparison Cards */}
           {hasResults && (
             <div className="mt-6 space-y-4">
-              <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-1">
+              <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1">
                 <Compass size={12} /> Bảng so sánh tuyến
               </h3>
 
@@ -374,25 +374,25 @@ const RouteFinder: React.FC = () => {
                   onClick={() => setSelectedMode('shortest')}
                   className={`p-3 rounded-xl border-2 text-left cursor-pointer transition flex flex-col justify-between ${
                     selectedMode === 'shortest'
-                      ? 'border-indigo-500 bg-indigo-50/40'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-indigo-500 bg-indigo-500/10'
+                      : 'border-white/10 bg-slate-900/40 hover:border-slate-800'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-bold text-indigo-700 flex items-center gap-1">
+                    <span className="text-xs font-bold text-indigo-400 flex items-center gap-1">
                       📏 Ngắn nhất
                     </span>
                     {isShortestRecommended && (
-                      <span className="text-[9px] font-bold bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full">
+                      <span className="text-[9px] font-bold bg-indigo-950/80 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded-full">
                         ⭐ Tốt nhất
                       </span>
                     )}
                   </div>
                   <div>
-                    <div className="text-xl font-black text-indigo-900 leading-none">
-                      {Number((routeShortest.total_distance_m / 1000).toFixed(2))} <span className="text-xs font-normal text-indigo-500">km</span>
+                    <div className="text-xl font-black text-indigo-200 leading-none">
+                      {Number((routeShortest.total_distance_m / 1000).toFixed(2))} <span className="text-xs font-normal text-indigo-400">km</span>
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-1">
+                    <div className="text-[10px] text-slate-400 mt-1">
                       Thời gian: {Math.round(routeShortest.estimated_time_min)} phút
                     </div>
                   </div>
@@ -403,25 +403,25 @@ const RouteFinder: React.FC = () => {
                   onClick={() => setSelectedMode('fastest')}
                   className={`p-3 rounded-xl border-2 text-left cursor-pointer transition flex flex-col justify-between ${
                     selectedMode === 'fastest'
-                      ? 'border-green-500 bg-green-50/40'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-green-500 bg-green-500/10'
+                      : 'border-white/10 bg-slate-900/40 hover:border-slate-800'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-bold text-green-700 flex items-center gap-1">
+                    <span className="text-xs font-bold text-green-400 flex items-center gap-1">
                       ⚡ Nhanh nhất
                     </span>
                     {!isShortestRecommended && (
-                      <span className="text-[9px] font-bold bg-green-100 text-green-600 px-1.5 py-0.5 rounded-full">
+                      <span className="text-[9px] font-bold bg-green-950/80 text-green-400 border border-green-500/30 px-1.5 py-0.5 rounded-full">
                         ⭐ Tốt nhất
                       </span>
                     )}
                   </div>
                   <div>
-                    <div className="text-xl font-black text-green-900 leading-none">
-                      {Math.round(routeFastest.estimated_time_min)} <span className="text-xs font-normal text-green-500">phút</span>
+                    <div className="text-xl font-black text-green-200 leading-none">
+                      {Math.round(routeFastest.estimated_time_min)} <span className="text-xs font-normal text-green-400">phút</span>
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-1">
+                    <div className="text-[10px] text-slate-400 mt-1">
                       Khoảng cách: {Number((routeFastest.total_distance_m / 1000).toFixed(2))} km
                     </div>
                   </div>
@@ -429,8 +429,8 @@ const RouteFinder: React.FC = () => {
               </div>
 
               {/* Mode indicator label */}
-              <div className="p-2.5 bg-gray-50 rounded-lg text-[10px] text-gray-500 text-center border">
-                Tuyến đường đang vẽ: <b className={selectedMode === 'shortest' ? 'text-indigo-600' : 'text-green-600'}>
+              <div className="p-2.5 bg-slate-900/60 rounded-lg text-[10px] text-slate-400 text-center border border-white/5">
+                Tuyến đường đang vẽ: <b className={selectedMode === 'shortest' ? 'text-indigo-400' : 'text-green-400'}>
                   {selectedMode === 'shortest' ? '📏 Ngắn nhất' : '⚡ Nhanh nhất'}
                 </b>
               </div>
@@ -440,17 +440,17 @@ const RouteFinder: React.FC = () => {
 
         {/* 4. Scrollable List of Streets Passed */}
         {hasResults && streetStatuses.length > 0 && (
-          <div className="border-t border-gray-100 bg-gray-50/50 p-5 flex flex-col">
-            <h4 className="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1">
+          <div className="border-t border-white/10 bg-slate-950/40 p-5 flex flex-col">
+            <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
               <ListOrdered size={12} /> Các đường đi qua ({streetStatuses.length})
             </h4>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
               {streetStatuses.map((st: any, idx: number) => (
                 <div
                   key={`route-street-${idx}`}
-                  className="bg-white border border-gray-200 rounded-lg p-2 flex flex-col justify-between shadow-sm"
+                  className="bg-slate-900/40 border border-white/5 rounded-lg p-2 flex flex-col justify-between shadow-sm"
                 >
-                  <div className="text-[11px] font-semibold text-gray-800 truncate" title={st.name}>
+                  <div className="text-[11px] font-semibold text-slate-200 truncate" title={st.name}>
                     {st.name}
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
@@ -463,7 +463,7 @@ const RouteFinder: React.FC = () => {
                             : CONGESTION_COLORS['null'],
                       }}
                     />
-                    <span className="text-[9px] font-medium text-gray-500 truncate">
+                    <span className="text-[9px] font-medium text-slate-400 truncate">
                       {st.congestion_level !== null
                         ? `${getCongestionLabel(st.congestion_level)} · ${st.avg_speed}km/h`
                         : 'Không có data'}
@@ -478,7 +478,7 @@ const RouteFinder: React.FC = () => {
 
       {/* 2. Right Map Panel */}
       <div className="flex-grow h-full relative">
-        <TrafficMap>
+        <TrafficMap hideTrafficLines={true}>
           {(map) => (
             <RouteLayer map={map} />
           )}

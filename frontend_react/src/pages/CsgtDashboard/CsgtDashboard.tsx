@@ -34,11 +34,19 @@ const CsgtDashboard: React.FC = () => {
   // 2. Load street geometry for name -> id lookup
   const { data: geometry } = useGeometry();
 
+  // 3. Fetch active incidents for map markers
+  const { data: activeIncidents } = useQuery({
+    queryKey: ['activeIncidents'],
+    queryFn: () => incidentsApi.getIncidents({ is_active: true }),
+    refetchInterval: 10000, // 10s auto-refresh
+  });
+
   // 4. Create Incident Mutation
   const createIncidentMutation = useMutation({
     mutationFn: (data: any) => incidentsApi.createIncident(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['activeIncidents'] });
       queryClient.invalidateQueries({ queryKey: ['statsReport'] });
       setIsModalOpen(false);
       setSelectedStreet(null);
@@ -46,7 +54,15 @@ const CsgtDashboard: React.FC = () => {
       setSubmitError(null);
     },
     onError: (err: any) => {
-      setSubmitError(err.response?.data?.detail || 'Không thể tạo sự cố điều phối.');
+      const detail = err.response?.data?.detail;
+      if (typeof detail === 'string') {
+        setSubmitError(detail);
+      } else if (Array.isArray(detail)) {
+        const msg = detail.map((d: any) => `${d.loc.join('.')}: ${d.msg}`).join(', ');
+        setSubmitError(msg);
+      } else {
+        setSubmitError('Không thể tạo sự cố điều phối.');
+      }
     },
   });
 
@@ -73,6 +89,7 @@ const CsgtDashboard: React.FC = () => {
     createIncidentMutation.mutate({
       street_id: streetGeom.street_id,
       type: incidentType,
+      start_time: new Date().toISOString(),
       severity,
       description,
       status,
@@ -102,14 +119,14 @@ const CsgtDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-10 px-4 md:px-8 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen pt-20 pb-10 px-4 md:px-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="border-b border-gray-200 pb-5">
-        <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
-          <Shield className="text-blue-600" />
+      <div className="border-b border-white/10 pb-5">
+        <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
+          <Shield className="text-blue-400" />
           Giao diện Điều tiết CSGT Đà Nẵng
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-slate-400 mt-1">
           Hệ thống điều phối lực lượng tuần tra và xử lý kẹt xe thời gian thực dành cho cảnh sát giao thông.
         </p>
       </div>
@@ -119,8 +136,8 @@ const CsgtDashboard: React.FC = () => {
         {/* Left Column: Speed Gauge and Top Congested Streets */}
         <div className="lg:col-span-1 space-y-6">
           {/* Gauge Widget */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex flex-col items-center justify-center text-center">
-            <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5 self-start">
+          <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl p-6 flex flex-col items-center justify-center text-center">
+            <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5 self-start">
               <Gauge size={16} />
               Tốc độ toàn thành phố
             </h3>
@@ -132,7 +149,7 @@ const CsgtDashboard: React.FC = () => {
                 <path
                   d="M 10 50 A 40 40 0 0 1 90 50"
                   fill="none"
-                  stroke="#e2e8f0"
+                  stroke="rgba(255,255,255,0.05)"
                   strokeWidth="8"
                   strokeLinecap="round"
                 />
@@ -151,10 +168,10 @@ const CsgtDashboard: React.FC = () => {
 
               {/* Central speed display text */}
               <div className="absolute bottom-0 text-center">
-                <span className="text-3xl font-black text-gray-800 leading-none">
+                <span className="text-3xl font-black text-white leading-none">
                   {Math.round(avgSpeed)}
                 </span>
-                <span className="text-xs text-gray-500 font-semibold block mt-0.5">km/h</span>
+                <span className="text-xs text-slate-400 font-semibold block mt-0.5">km/h</span>
               </div>
             </div>
 
@@ -173,8 +190,8 @@ const CsgtDashboard: React.FC = () => {
           </div>
 
           {/* Top Congested list with "🚔 Điều động" action button */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+          <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl p-6">
+            <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
               <AlertTriangle className="text-amber-500" size={16} />
               Điểm nóng ùn tắc giao thông
             </h3>
@@ -182,24 +199,24 @@ const CsgtDashboard: React.FC = () => {
             {isReportLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-12 bg-gray-50 rounded-lg animate-pulse" />
+                  <div key={i} className="h-12 bg-white/5 rounded-lg animate-pulse" />
                 ))}
               </div>
             ) : report && report.top_congested && report.top_congested.length > 0 ? (
-              <div className="divide-y divide-gray-100 max-h-[360px] overflow-y-auto pr-1">
+              <div className="divide-y divide-white/5 max-h-[360px] overflow-y-auto pr-1">
                 {report.top_congested.map((street, idx) => (
                   <div key={`csgt-hot-${idx}`} className="py-3 flex items-center justify-between first:pt-0 last:pb-0 gap-3">
                     <div className="min-w-0">
-                      <span className="text-xs font-bold text-gray-800 block truncate" title={street.street_name}>
+                      <span className="text-xs font-bold text-slate-200 block truncate" title={street.street_name}>
                         {street.street_name}
                       </span>
-                      <span className="text-[10px] text-gray-400 block">
+                      <span className="text-[10px] text-slate-400 block">
                         Tốc độ TB: <b>{Math.round(street.avg_speed)} km/h</b>
                       </span>
                     </div>
                     <button
                       onClick={() => handleOpenDispatch(street.street_name)}
-                      className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-bold shadow-sm transition flex items-center gap-1 cursor-pointer flex-shrink-0"
+                      className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold shadow-sm transition flex items-center gap-1 cursor-pointer flex-shrink-0"
                     >
                       🚔 Điều động
                     </button>
@@ -207,7 +224,7 @@ const CsgtDashboard: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="text-center text-gray-400 text-xs py-10">
+              <div className="text-center text-slate-400 text-xs py-10">
                 Không có điểm nóng kẹt xe hiện tại.
               </div>
             )}
@@ -217,13 +234,16 @@ const CsgtDashboard: React.FC = () => {
         {/* Right Column: Live Map and Dispatch Feed Info */}
         <div className="lg:col-span-2 space-y-6 flex flex-col">
           {/* Mini Real-time Map */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex flex-col flex-grow min-h-[380px]">
-            <h3 className="text-xs font-extrabold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+          <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl p-4 flex flex-col flex-grow min-h-[380px]">
+            <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
               <Radio size={16} className="text-red-500 animate-pulse" />
               Bản đồ kẹt xe trực quan
             </h3>
-            <div className="w-full flex-grow rounded-xl overflow-hidden border border-gray-200 min-h-[300px]">
-              <TrafficMap />
+            <div className="w-full flex-grow rounded-xl overflow-hidden border border-white/10 min-h-[300px]">
+              <TrafficMap 
+                activeIncidents={activeIncidents}
+                onStreetClick={handleOpenDispatch}
+              />
             </div>
           </div>
         </div>
@@ -231,11 +251,11 @@ const CsgtDashboard: React.FC = () => {
 
       {/* 5. Dispatch Modal Dialog Form */}
       {isModalOpen && selectedStreet && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl max-w-md w-full overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-fade-in text-white">
             {/* Modal Header */}
-            <div className="bg-gray-50 border-b px-5 py-4 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+            <div className="bg-slate-950/60 border-b border-white/10 px-5 py-4 flex items-center justify-between">
+              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
                 🚔 Tạo lệnh điều động tuần tra
               </h4>
               <button
@@ -244,43 +264,43 @@ const CsgtDashboard: React.FC = () => {
                   setSelectedStreet(null);
                   setSubmitError(null);
                 }}
-                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                className="text-slate-400 hover:text-white transition cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleFormSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleFormSubmit} className="p-5 space-y-4 bg-slate-900/60">
               {submitError && (
-                <div className="p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold">
+                <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 rounded-lg text-xs font-semibold">
                   ⚠️ {submitError}
                 </div>
               )}
 
               {/* Target Street */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Đường điều động
                 </label>
                 <input
                   type="text"
                   value={selectedStreet}
                   disabled
-                  className="w-full bg-gray-50 text-gray-600 border border-gray-200 rounded-lg px-3 py-2 text-xs font-bold cursor-not-allowed"
+                  className="w-full bg-slate-950/60 text-slate-300 border border-white/10 rounded-lg px-3 py-2 text-xs font-bold cursor-not-allowed"
                 />
               </div>
 
               {/* Incident Type & Severity */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                     Loại sự cố
                   </label>
                   <select
                     value={incidentType}
                     onChange={(e: any) => setIncidentType(e.target.value)}
-                    className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                   >
                     <option value="accident">Tai nạn</option>
                     <option value="roadblock">Cản trở đường</option>
@@ -290,30 +310,30 @@ const CsgtDashboard: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                     Mức độ nghiêm trọng
                   </label>
                   <select
                     value={severity}
                     onChange={(e: any) => setSeverity(Number(e.target.value))}
-                    className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                    className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                   >
-                    <option value={0}>Thấp (Nhẹ)</option>
-                    <option value={1}>Trung bình (Chậm)</option>
-                    <option value={2}>Cao (Kẹt cứng)</option>
+                    <option value={1}>Thấp (Nhẹ)</option>
+                    <option value={2}>Trung bình (Chậm)</option>
+                    <option value={3}>Cao (Kẹt cứng)</option>
                   </select>
                 </div>
               </div>
 
               {/* Dispatch Action Status */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Trạng thái xử lý ban đầu
                 </label>
                 <select
                   value={status}
                   onChange={(e: any) => setStatus(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                 >
                   <option value="dispatched">🚔 Đã điều động tuần tra</option>
                   <option value="active">⚠️ Đang xảy ra sự cố</option>
@@ -322,20 +342,20 @@ const CsgtDashboard: React.FC = () => {
 
               {/* Description */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Mô tả & Nhiệm vụ
                 </label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   required
                 />
               </div>
 
               {/* Submit Buttons */}
-              <div className="pt-2 flex justify-end gap-2 border-t mt-4">
+              <div className="pt-2 flex justify-end gap-2 border-t border-white/10 mt-4">
                 <button
                   type="button"
                   onClick={() => {
@@ -343,14 +363,14 @@ const CsgtDashboard: React.FC = () => {
                     setSelectedStreet(null);
                     setSubmitError(null);
                   }}
-                  className="px-4 py-2 border rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 cursor-pointer"
+                  className="px-4 py-2 border border-white/10 rounded-lg text-xs font-semibold text-slate-400 hover:bg-white/5 transition cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
                   disabled={createIncidentMutation.isPending}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {createIncidentMutation.isPending ? 'Đang gửi lệnh...' : 'Gửi lệnh đi 🚀'}
                 </button>

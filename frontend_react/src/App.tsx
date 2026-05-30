@@ -26,7 +26,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <div className="flex flex-col min-h-screen bg-gray-50">
+        <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
           <Navbar />
           <main className="flex-grow">
             <Routes>
@@ -34,9 +34,15 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/route-finder" element={<RouteFinder />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-
               {/* CSGT & Admin Protected Routes */}
+              <Route
+                path="/dashboard"
+                element={
+                  <RouteGuard allowedRoles={['csgt', 'admin']}>
+                    <Dashboard />
+                  </RouteGuard>
+                }
+              />
               <Route
                 path="/csgt-dashboard"
                 element={

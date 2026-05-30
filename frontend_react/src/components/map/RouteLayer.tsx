@@ -41,7 +41,11 @@ const RouteLayer: React.FC<RouteLayerProps> = ({ map }) => {
 
     map.on('click', handleMapClick);
     return () => {
-      map.off('click', handleMapClick);
+      try {
+        map.off('click', handleMapClick);
+      } catch (err) {
+        console.warn('Error cleaning up click handler:', err);
+      }
     };
   }, [map]);
 
@@ -84,8 +88,12 @@ const RouteLayer: React.FC<RouteLayerProps> = ({ map }) => {
     }
 
     return () => {
-      if (startMarkerRef.current) startMarkerRef.current.remove();
-      if (endMarkerRef.current) endMarkerRef.current.remove();
+      try {
+        if (startMarkerRef.current) startMarkerRef.current.remove();
+      } catch (e) {}
+      try {
+        if (endMarkerRef.current) endMarkerRef.current.remove();
+      } catch (e) {}
     };
   }, [map, fromPos, toPos]);
 
@@ -156,8 +164,15 @@ const RouteLayer: React.FC<RouteLayerProps> = ({ map }) => {
     }
 
     return () => {
-      if (map.getLayer('route-line')) map.removeLayer('route-line');
-      if (map.getSource('route')) map.removeSource('route');
+      try {
+        map.off('style.load', updateRoute);
+      } catch (e) {}
+      try {
+        if (map.getLayer('route-line')) map.removeLayer('route-line');
+      } catch (e) {}
+      try {
+        if (map.getSource('route')) map.removeSource('route');
+      } catch (e) {}
     };
   }, [map, routeShortest, routeFastest, selectedMode]);
 

@@ -205,6 +205,15 @@ def build_traffic_graph(db_session=None) -> nx.DiGraph:
         # Tốc độ thực tế; tối thiểu 5 km/h để tránh chia cho 0
         live_spd  = s["live_speed"]
         act_spd   = max(live_spd if live_spd else max_spd, 5.0)
+        cong_lvl  = 0
+        if max_spd > 0:
+            ratio = act_spd / max_spd
+            if ratio >= 0.70:
+                cong_lvl = 0
+            elif ratio >= 0.40:
+                cong_lvl = 1
+            else:
+                cong_lvl = 2
 
         for i in range(len(coords) - 1):
             lng_a, lat_a = coords[i]
@@ -217,9 +226,9 @@ def build_traffic_graph(db_session=None) -> nx.DiGraph:
             t_hrs = d_km / act_spd
             G.add_node(A, lat=lat_a, lng=lng_a)
             G.add_node(B, lat=lat_b, lng=lng_b)
-            G.add_edge(A, B, weight_km=d_km, weight_time=t_hrs, street=name)
+            G.add_edge(A, B, weight_km=d_km, weight_time=t_hrs, street=name, avg_speed=act_spd, congestion_level=cong_lvl)
             if not one_way:
-                G.add_edge(B, A, weight_km=d_km, weight_time=t_hrs, street=name)
+                G.add_edge(B, A, weight_km=d_km, weight_time=t_hrs, street=name, avg_speed=act_spd, congestion_level=cong_lvl)
 
     log.info(f"Graph raw: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
 
@@ -273,8 +282,8 @@ def _connect_nearby_nodes(G: nx.DiGraph, threshold_km: float = 0.05):
             if G.has_edge(node, neighbor):
                 continue
             t_hrs = d_km / 10.0   # 10 km/h qua ngã tư
-            G.add_edge(node, neighbor, weight_km=d_km, weight_time=t_hrs, street="[intersection]")
-            G.add_edge(neighbor, node, weight_km=d_km, weight_time=t_hrs, street="[intersection]")
+            G.add_edge(node, neighbor, weight_km=d_km, weight_time=t_hrs, street="[intersection]", avg_speed=10.0, congestion_level=0)
+            G.add_edge(neighbor, node, weight_km=d_km, weight_time=t_hrs, street="[intersection]", avg_speed=10.0, congestion_level=0)
             added += 1
 
     log.info(f"Intersection bridges added: {added} pairs")
@@ -313,8 +322,8 @@ def _bridge_isolated_components(G: nx.DiGraph, max_gap_km: float = 0.3):
 
         if best_a and min_d <= max_gap_km:
             t_hrs = min_d / 15.0
-            G.add_edge(best_a, best_b, weight_km=min_d, weight_time=t_hrs, street="[bridge]")
-            G.add_edge(best_b, best_a, weight_km=min_d, weight_time=t_hrs, street="[bridge]")
+            G.add_edge(best_a, best_b, weight_km=min_d, weight_time=t_hrs, street="[bridge]", avg_speed=15.0, congestion_level=0)
+            G.add_edge(best_b, best_a, weight_km=min_d, weight_time=t_hrs, street="[bridge]", avg_speed=15.0, congestion_level=0)
             bridged += 1
             log.info(f"Bridge comp {ci}({len(comp)}) → {min_d*1000:.0f}m → main({len(main_list)})")
         else:
@@ -388,21 +397,29 @@ def find_route(
         return {"error": f"Node không tồn tại: {e}"}
 
     total_km = total_hrs = 0.0
-    streets: list[str] = []
+    streets_list = []
     for i in range(len(path) - 1):
         ed = G[path[i]][path[i + 1]]
         total_km  += ed.get("weight_km",   0.0)
         total_hrs += ed.get("weight_time", 0.0)
-        st = ed.get("street", "")
-        if not streets or streets[-1] != st:
-            streets.append(st)
+        st_name = ed.get("street", "")
+        avg_speed = ed.get("avg_speed", 40.0)
+        congestion_level = ed.get("congestion_level", 0)
+        if not streets_list or streets_list[-1]["name"] != st_name:
+            streets_list.append({
+                "name": st_name,
+                "congestion_level": congestion_level,
+                "avg_speed": round(avg_speed, 1)
+            })
 
     return {
-        "path"        : [[lng, lat] for lng, lat in path],  # [[lng,lat],...]
-        "distance_km" : round(total_km, 2),
-        "duration_min": round(total_hrs * 60, 1),
-        "streets"     : streets,
-        "node_count"  : len(path),
+        "path"              : [[lng, lat] for lng, lat in path],  # [[lng,lat],...]
+        "distance_km"       : round(total_km, 2),
+        "duration_min"      : round(total_hrs * 60, 1),
+        "total_distance_m"  : round(total_km * 1000, 1),
+        "estimated_time_min": round(total_hrs * 60, 1),
+        "streets"           : streets_list,
+        "node_count"        : len(path),
     }
 
 

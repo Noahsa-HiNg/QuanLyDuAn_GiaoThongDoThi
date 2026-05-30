@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 
 const ROLE_BADGES = {
-  admin: 'bg-red-50 text-red-700 border-red-200',
-  csgt: 'bg-blue-50 text-blue-700 border-blue-200',
-  user: 'bg-gray-50 text-gray-700 border-gray-200',
+  admin: 'bg-red-500/10 text-red-400 border-red-500/20',
+  csgt: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  user: 'bg-slate-800 text-slate-300 border-white/5',
 };
 
 const AdminUsers: React.FC = () => {
@@ -112,38 +112,38 @@ const AdminUsers: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-10 px-4 md:px-8 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen pt-20 pb-10 px-4 md:px-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2">
-            <Users className="text-blue-600" />
+          <h1 className="text-2xl font-extrabold text-white flex items-center gap-2">
+            <Users className="text-blue-400" />
             Quản lý tài khoản người dùng
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-slate-400 mt-1">
             Xem danh sách thành viên, khóa/mở khóa tài khoản cảnh sát giao thông hoặc cấp quyền quản trị hệ thống.
           </p>
         </div>
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition flex items-center gap-1.5 shadow-sm cursor-pointer self-start sm:self-auto"
+          className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg text-sm transition flex items-center gap-1.5 shadow-sm cursor-pointer self-start sm:self-auto"
         >
           <UserPlus size={16} /> Thêm tài khoản
         </button>
       </div>
 
       {/* Users Table */}
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500 animate-pulse text-sm">
+          <div className="p-8 text-center text-slate-400 animate-pulse text-sm">
             Đang tải danh sách người dùng...
           </div>
         ) : users.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                <tr className="bg-slate-950/80 border-b border-white/10 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-6 py-4 w-16">ID</th>
                   <th className="px-6 py-4">Họ và tên</th>
                   <th className="px-6 py-4">Email đăng nhập</th>
@@ -152,27 +152,27 @@ const AdminUsers: React.FC = () => {
                   <th className="px-6 py-4 w-40 text-center">Hành động</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-white/5">
                 {users.map((u) => {
                   const isSelf = u.id === currentUser?.id;
-                  const roleBadge = ROLE_BADGES[u.role] || ROLE_BADGES.user;
+                  const roleBadge = ROLE_BADGES[u.role as keyof typeof ROLE_BADGES] || ROLE_BADGES.user;
 
                   return (
-                    <tr key={`user-row-${u.id}`} className="hover:bg-gray-50/50 transition">
-                      <td className="px-6 py-4 text-xs font-bold text-gray-500">#{u.id}</td>
+                    <tr key={`user-row-${u.id}`} className="hover:bg-white/5 transition">
+                      <td className="px-6 py-4 text-xs font-bold text-slate-500">#{u.id}</td>
                       <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                           {u.full_name}
                           {isSelf && (
-                            <span className="text-[9px] font-semibold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full border">
+                            <span className="text-[9px] font-semibold bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded-full border border-white/5">
                               Bạn
                             </span>
                           )}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-xs text-gray-500">
+                      <td className="px-6 py-4 text-xs text-slate-400">
                         <span className="flex items-center gap-1">
-                          <Mail size={12} className="text-gray-400" />
+                          <Mail size={12} className="text-slate-500" />
                           {u.email}
                         </span>
                       </td>
@@ -184,8 +184,8 @@ const AdminUsers: React.FC = () => {
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${
                           u.is_locked 
-                            ? 'bg-red-50 text-red-600 border-red-200' 
-                            : 'bg-green-50 text-green-600 border-green-200'
+                            ? 'bg-red-500/10 text-red-400 border-red-500/20' 
+                            : 'bg-green-500/10 text-green-400 border-green-500/20'
                         }`}>
                           {u.is_locked ? <UserX size={10} /> : <UserCheck size={10} />}
                           {u.is_locked ? 'Đang khóa' : 'Hoạt động'}
@@ -198,10 +198,10 @@ const AdminUsers: React.FC = () => {
                           disabled={isSelf}
                           className={`p-1.5 rounded-lg border transition ${
                             isSelf 
-                              ? 'text-gray-300 border-gray-100 cursor-not-allowed' 
+                              ? 'text-slate-600 border-white/5 cursor-not-allowed' 
                               : u.is_locked 
-                                ? 'text-green-600 border-green-200 bg-green-50/20 hover:bg-green-50 cursor-pointer' 
-                                : 'text-amber-500 border-amber-200 bg-amber-50/20 hover:bg-amber-50 cursor-pointer'
+                                ? 'text-green-400 border-green-500/30 bg-green-500/10 hover:bg-green-500/20 cursor-pointer' 
+                                : 'text-amber-400 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 cursor-pointer'
                           }`}
                           title={u.is_locked ? 'Mở khóa tài khoản' : 'Khóa tài khoản'}
                         >
@@ -214,8 +214,8 @@ const AdminUsers: React.FC = () => {
                           disabled={isSelf}
                           className={`p-1.5 rounded-lg border transition ${
                             isSelf 
-                              ? 'text-gray-300 border-gray-100 cursor-not-allowed' 
-                              : 'text-red-500 border-red-200 bg-red-50/20 hover:bg-red-50 cursor-pointer'
+                              ? 'text-slate-600 border-white/5 cursor-not-allowed' 
+                              : 'text-red-400 border-red-500/30 bg-red-500/10 hover:bg-red-500/20 cursor-pointer'
                           }`}
                           title="Xóa tài khoản"
                         >
@@ -229,7 +229,7 @@ const AdminUsers: React.FC = () => {
             </table>
           </div>
         ) : (
-          <div className="p-10 text-center text-gray-400 text-xs">
+          <div className="p-10 text-center text-slate-400 text-xs">
             Không tìm thấy tài khoản người dùng nào.
           </div>
         )}
@@ -237,12 +237,12 @@ const AdminUsers: React.FC = () => {
 
       {/* 4. Create User Modal Overlay */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden text-white">
             {/* Header */}
-            <div className="bg-gray-50 border-b px-5 py-4 flex items-center justify-between">
-              <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
-                <UserPlus className="text-blue-600" size={18} />
+            <div className="bg-slate-950/60 border-b border-white/10 px-5 py-4 flex items-center justify-between">
+              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <UserPlus className="text-blue-400" size={18} />
                 Thêm tài khoản thành viên mới
               </h4>
               <button
@@ -250,23 +250,23 @@ const AdminUsers: React.FC = () => {
                   setIsModalOpen(false);
                   resetForm();
                 }}
-                className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                className="text-slate-400 hover:text-white cursor-pointer transition"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleCreateSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleCreateSubmit} className="p-5 space-y-4 bg-slate-900/60">
               {formError && (
-                <div className="p-2.5 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold">
+                <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 rounded-lg text-xs font-semibold">
                   ⚠️ {formError}
                 </div>
               )}
 
               {/* Full name */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Họ và tên
                 </label>
                 <input
@@ -274,14 +274,14 @@ const AdminUsers: React.FC = () => {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Nhập họ và tên đầy đủ..."
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   required
                 />
               </div>
 
               {/* Email */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Email đăng ký
                 </label>
                 <input
@@ -289,14 +289,14 @@ const AdminUsers: React.FC = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@domain.com"
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   required
                 />
               </div>
 
               {/* Password */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Mật khẩu đăng nhập
                 </label>
                 <input
@@ -304,7 +304,7 @@ const AdminUsers: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Nhập mật khẩu..."
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
                   required
                   minLength={6}
                 />
@@ -312,13 +312,13 @@ const AdminUsers: React.FC = () => {
 
               {/* Role selection */}
               <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Quyền hạn vai trò
                 </label>
                 <select
                   value={role}
                   onChange={(e: any) => setRole(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                 >
                   <option value="user">User (Thành viên cộng đồng)</option>
                   <option value="csgt">CSGT (Điều phối giao thông)</option>
@@ -327,21 +327,21 @@ const AdminUsers: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-2 flex justify-end gap-2 border-t mt-4">
+              <div className="pt-2 flex justify-end gap-2 border-t border-white/10 mt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setIsModalOpen(false);
                     resetForm();
                   }}
-                  className="px-4 py-2 border rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50 cursor-pointer"
+                  className="px-4 py-2 border border-white/10 rounded-lg text-xs font-semibold text-slate-400 hover:bg-white/5 transition cursor-pointer"
                 >
                   Hủy bỏ
                 </button>
                 <button
                   type="submit"
                   disabled={createUserMutation.isPending}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {createUserMutation.isPending ? 'Đang tạo...' : 'Tạo tài khoản'}
                 </button>

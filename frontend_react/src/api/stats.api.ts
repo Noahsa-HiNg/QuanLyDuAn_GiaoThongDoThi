@@ -35,6 +35,34 @@ export interface WeatherCurrent {
   weather_group: string;
 }
 
+export interface IncidentStats {
+  total_active: number;
+  by_type: Record<string, number>;
+  by_severity: Record<string, number>;
+  avg_resolve_time_minutes: number;
+}
+
+export interface TopReportedStreet {
+  street_name: string;
+  report_count: number;
+}
+
+export interface FeedbackStats {
+  total_reports: number;
+  by_type: Record<string, number>;
+  top_reported_streets: TopReportedStreet[];
+}
+
+export interface PredictedRecord {
+  road_id: number;
+  road_name: string;
+  lat: number | null;
+  lng: number | null;
+  predicted_level: number; // 1=xanh, 2=vàng, 3=đỏ
+  confidence: number;
+  predicted_at: string;
+}
+
 export const statsApi = {
   getReport: async (): Promise<StatsReport> => {
     const response = await api.get<StatsReport>('/api/stats/report');
@@ -52,4 +80,17 @@ export const statsApi = {
     const response = await api.get<WeatherCurrent>('/api/weather/current');
     return response.data;
   },
+  getIncidentStats: async (): Promise<IncidentStats> => {
+    const response = await api.get<IncidentStats>('/api/stats/incidents');
+    return response.data;
+  },
+  getFeedbackSummary: async (): Promise<FeedbackStats> => {
+    const response = await api.get<FeedbackStats>('/api/stats/feedback-summary');
+    return response.data;
+  },
+  getPredictions: async (): Promise<PredictedRecord[]> => {
+    const response = await api.get<PredictedRecord[]>('/api/predict/30min');
+    return response.data;
+  },
 };
+
