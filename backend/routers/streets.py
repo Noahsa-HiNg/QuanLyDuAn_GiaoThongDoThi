@@ -86,14 +86,38 @@ def get_streets(
 # Public endpoint — dùng cho Route Finder
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/streets/midpoints", summary="Midpoint tọa độ các tuyến đường")
-def get_street_midpoints():
+def get_street_midpoints(db: Session = Depends(get_db)):
     """
-    Tính midpoint (lat, lng) của từng tuyến đường trong MANUAL_COORDS.
-    Midpoint = phần tử chính giữa của danh sách tọa độ.
-    Format trong MANUAL_COORDS: [lng, lat] → trả về lat, lng.
+    Tính midpoint (lat, lng) của từng tuyến đường có geometry trong DB.
+    Dùng ST_Centroid(geometry) của PostGIS để lấy điểm trung tâm chính xác.
+    Fallback: MANUAL_COORDS nếu DB không có geometry.
     """
-    from data.manual_coords import MANUAL_COORDS
+    from sqlalchemy import text
 
+    try:
+        rows = db.execute(text("""
+            SELECT
+                s.name,
+                ST_Y(ST_Centroid(s.geometry)) AS lat,
+                ST_X(ST_Centroid(s.geometry)) AS lng
+            FROM streets s
+            WHERE s.geometry IS NOT NULL
+            ORDER BY s.name
+        """)).fetchall()
+
+        if rows:
+            result = [
+                {"name": r.name, "lat": round(r.lat, 6), "lng": round(r.lng, 6)}
+                for r in rows
+                if r.name and r.lat and r.lng
+            ]
+            return {"streets": result, "total": len(result)}
+    except Exception as e:
+        import logging
+        logging.getLogger("streets").warning(f"DB midpoints lỗi: {e}")
+
+    # Fallback: MANUAL_COORDS
+    from data.manual_coords import MANUAL_COORDS
     result = []
     for name, coords in MANUAL_COORDS.items():
         if not coords:

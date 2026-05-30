@@ -198,13 +198,14 @@ with col_crawl:
 
 with col_status:
     st.markdown("**📊 Trạng thái lần cào gần nhất**")
-    if crawl_status:
-        s_total   = crawl_status.get("streets_total", "—")
-        s_success = crawl_status.get("streets_success", "—")
-        s_fail    = crawl_status.get("streets_failed", "—")
-        s_time    = (crawl_status.get("crawled_at") or "—")[:16]
-        s_dur     = crawl_status.get("duration_sec")
-        dur_txt   = f"{s_dur:.1f}s" if s_dur else "—"
+    if crawl_status and crawl_status.get("last_result"):
+        last_res  = crawl_status["last_result"]
+        s_total   = last_res.get("streets_total", 0)
+        s_success = last_res.get("streets_success", 0)
+        s_fail    = max(0, s_total - s_success)
+        s_time    = (last_res.get("timestamp") or "—")[:19]
+        s_dur     = last_res.get("duration_seconds")
+        dur_txt   = f"{s_dur:.1f}s" if s_dur is not None else "—"
 
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -234,7 +235,7 @@ else:
         if isinstance(job, dict):
             job_id   = job.get("id", "")
             job_name = job.get("name", job_id)
-            next_run = (job.get("next_run_time") or "Chưa xác định")[:19].replace("T", " ")
+            next_run = (job.get("next_run_at") or "Chưa xác định")[:19].replace("T", " ")
             trigger  = job.get("trigger", "—")
         else:
             # Fallback: job là string (job ID)

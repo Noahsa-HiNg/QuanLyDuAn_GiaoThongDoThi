@@ -308,7 +308,7 @@ def admin_get_schedule_jobs(token: str) -> list:
             timeout=REQUEST_TIMEOUT,
         )
         resp.raise_for_status()
-        return _json_utf8(resp)
+        return _json_utf8(resp).get("jobs", [])
     except Exception:
         return []
 
