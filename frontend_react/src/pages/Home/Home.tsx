@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Menu, X, RotateCcw, AlertTriangle, Thermometer, CloudRain, Shield, RefreshCw } from 'lucide-react';
 import TrafficMap from '../../components/map/TrafficMap';
 import { trafficApi } from '../../api/traffic.api';
 import { incidentsApi } from '../../api/incidents.api';
 import { statsApi } from '../../api/stats.api';
+import { feedbackApi } from '../../api/feedback.api';
+import { useGeometry } from '../../hooks/useGeometry';
 import { DISTRICT_OPTIONS } from '../../constants/map.constants';
 import { useAuthStore } from '../../store/authStore';
 
@@ -18,6 +20,16 @@ const Home: React.FC = () => {
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isPredictionMode, setIsPredictionMode] = useState(false);
+
+  // Citizen Reporting Mode States
+  const [isReportMode, setIsReportMode] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportLat, setReportLat] = useState<number | null>(null);
+  const [reportLng, setReportLng] = useState<number | null>(null);
+  const [reportStreet, setReportStreet] = useState('');
+  const [reportType, setReportType] = useState<'congested' | 'clear' | 'accident'>('congested');
+  const [reportDesc, setReportDesc] = useState('');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Auto-refresh countdown
   const [countdown, setCountdown] = useState(240);
@@ -46,6 +58,57 @@ const Home: React.FC = () => {
     queryFn: () => statsApi.getWeatherCurrent(),
     refetchInterval: 300000,
   });
+
+  const { data: geometry } = useGeometry();
+
+  // 5. Submit Citizen Report Mutation
+  const createFeedbackMutation = useMutation({
+    mutationFn: (data: any) => feedbackApi.createFeedback(data),
+    onSuccess: () => {
+      alert('Cảm ơn bạn! Phản ánh của bạn đã được gửi thành công đến hệ thống của CSGT Đà Nẵng.');
+      setReportModalOpen(false);
+      setIsReportMode(false);
+      setReportDesc('');
+      setReportStreet('');
+      setSubmitError(null);
+    },
+    onError: (err: any) => {
+      const detail = err.response?.data?.detail;
+      let msg = 'Không thể gửi phản ánh. Vui lòng thử lại sau.';
+      if (typeof detail === 'string') msg = detail;
+      else if (Array.isArray(detail)) msg = detail.map((d: any) => d.msg).join(', ');
+      setSubmitError(msg);
+    },
+  });
+
+  const handleReportClick = (lat: number, lng: number, streetName?: string) => {
+    setReportLat(lat);
+    setReportLng(lng);
+    setReportStreet(streetName || '');
+    setReportModalOpen(true);
+    setSubmitError(null);
+  };
+
+  const handleReportSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (reportLat === null || reportLng === null) return;
+
+    let matchedStreetId: number | null = null;
+    if (reportStreet.trim() !== '' && geometry?.streets) {
+      const found = geometry.streets.find(
+        (s) => s.street_name.toLowerCase().trim() === reportStreet.toLowerCase().trim()
+      );
+      if (found) matchedStreetId = found.street_id;
+    }
+
+    createFeedbackMutation.mutate({
+      street_id: matchedStreetId,
+      lat: reportLat,
+      lon: reportLng,
+      report_type: reportType,
+      description: reportDesc,
+    });
+  };
 
   // Countdown logic
   useEffect(() => {
@@ -93,6 +156,8 @@ const Home: React.FC = () => {
           searchQuery={searchQuery}
           isPredictionMode={isPredictionMode}
           predictionData={predictionData}
+          isReportMode={isReportMode}
+          onReportClick={handleReportClick}
         />
       </div>
 
@@ -219,9 +284,166 @@ const Home: React.FC = () => {
       <button
         onClick={() => setIsFilterOpen(!isFilterOpen)}
         className="absolute top-20 left-4 z-30 bg-slate-900/80 hover:bg-slate-800/80 backdrop-blur-sm border border-white/10 shadow-lg rounded-full p-3 text-slate-200 transition cursor-pointer"
+        title="Bộ lọc bản đồ"
       >
         <Menu size={20} />
       </button>
+
+      {/* Citizen Report Mode Toggle Button */}
+      <button
+        onClick={() => {
+          setIsReportMode(!isReportMode);
+          if (isFilterOpen) setIsFilterOpen(false);
+        }}
+        className={`absolute top-36 left-4 z-30 backdrop-blur-sm border shadow-lg rounded-full p-3 transition cursor-pointer ${
+          isReportMode
+            ? 'bg-red-600 hover:bg-red-500 border-red-500 text-white animate-pulse'
+            : 'bg-slate-900/80 hover:bg-slate-800/80 border-white/10 text-slate-200'
+        }`}
+        title={isReportMode ? 'Tắt chế độ báo cáo kẹt xe' : 'Bật chế độ báo cáo kẹt xe'}
+      >
+        <AlertTriangle size={20} />
+      </button>
+
+      {/* Report Mode Top Banner Overlay */}
+      {isReportMode && (
+        <div className="absolute top-36 left-16 z-30 bg-red-600/95 backdrop-blur-md border border-red-500/30 text-white rounded-xl px-4 py-2 text-xs font-bold shadow-2xl animate-pulse flex items-center gap-2 max-w-[280px] sm:max-w-sm">
+          <span>🚨</span>
+          <span className="leading-tight">Chế độ báo cáo kẹt xe đang bật. Hãy click vào bản đồ để báo cáo!</span>
+          <button
+            onClick={() => setIsReportMode(false)}
+            className="ml-auto font-bold underline hover:text-slate-200 cursor-pointer shrink-0"
+          >
+            Hủy
+          </button>
+        </div>
+      )}
+
+      {/* 6. Citizen Report Modal Form */}
+      {reportModalOpen && reportLat !== null && reportLng !== null && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden text-white">
+            {/* Modal Header */}
+            <div className="bg-slate-950/60 border-b border-white/10 px-5 py-4 flex items-center justify-between">
+              <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
+                📢 Gửi phản ánh giao thông
+              </h4>
+              <button
+                onClick={() => {
+                  setReportModalOpen(false);
+                  setSubmitError(null);
+                }}
+                className="text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleReportSubmit} className="p-5 space-y-4 bg-slate-900/60">
+              {submitError && (
+                <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 rounded-lg text-xs font-semibold">
+                  ⚠️ {submitError}
+                </div>
+              )}
+
+              {/* Coordinates */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Vĩ độ (Latitude)
+                  </label>
+                  <input
+                    type="text"
+                    value={reportLat.toFixed(6)}
+                    disabled
+                    className="w-full bg-slate-950/60 text-slate-400 border border-white/10 rounded-lg px-3 py-2 cursor-not-allowed font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Kinh độ (Longitude)
+                  </label>
+                  <input
+                    type="text"
+                    value={reportLng.toFixed(6)}
+                    disabled
+                    className="w-full bg-slate-950/60 text-slate-400 border border-white/10 rounded-lg px-3 py-2 cursor-not-allowed font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Street Name input */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Tên đường phản ánh
+                </label>
+                <input
+                  type="text"
+                  value={reportStreet}
+                  onChange={(e) => setReportStreet(e.target.value)}
+                  placeholder="Ví dụ: Bạch Đằng"
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Nhập chính xác tên đường để hệ thống cập nhật đúng vị trí
+                </span>
+              </div>
+
+              {/* Report Type */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Mức độ giao thông thực tế
+                </label>
+                <select
+                  value={reportType}
+                  onChange={(e: any) => setReportType(e.target.value)}
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="congested">🔴 Kẹt xe / Ùn tắc</option>
+                  <option value="accident">⚠️ Có tai nạn giao thông</option>
+                  <option value="clear">🟢 Đường thông thoáng</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Mô tả chi tiết / Ghi chú
+                </label>
+                <textarea
+                  value={reportDesc}
+                  onChange={(e) => setReportDesc(e.target.value)}
+                  placeholder="Ghi chú thêm về sự cố để hỗ trợ CSGT..."
+                  rows={3}
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportModalOpen(false);
+                    setSubmitError(null);
+                  }}
+                  className="flex-1 py-2 border border-white/10 hover:bg-slate-800 text-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={createFeedbackMutation.isPending}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {createFeedbackMutation.isPending ? 'Đang gửi...' : 'Gửi phản ánh 🚀'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 4. Top-Right KPI cards overlay */}
       <div className="absolute top-20 right-4 z-30 flex flex-col gap-2 pointer-events-none">
