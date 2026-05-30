@@ -65,27 +65,10 @@ services:
     volumes:
       - ./frontend:/app
 
-  # ── SCHEDULER — Cào dữ liệu traffic mỗi 30 phút ─────────────────────────
-  # Chạy services/traffic_scheduler.py trong nền tự động
-  # Xem log: docker compose logs -f scheduler
-  scheduler:
-    build: ./backend
-    command: python services/traffic_scheduler.py
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      backend:
-        condition: service_started
-    env_file: .env
-    restart: unless-stopped
-    volumes:
-      - ./backend:/app
-    environment:
-      - PYTHONDONTWRITEBYTECODE=1
-      - PYTHONUNBUFFERED=1
-      - TZ=Asia/Ho_Chi_Minh        # ← Đặt timezone container = Việt Nam
+  # ── SCHEDULER ─────────────────────────────────────────────────────────────
+  # Scheduler cào dữ liệu định kỳ và retrain model tự động đã được tích hợp
+  # trực tiếp vào backend FastAPI (services/scheduler.py) qua lifespan hook.
+  # Không cần chạy service độc lập để tránh cào trùng lặp và lỗi crash.
 
   nginx:
     image: nginx:alpine
