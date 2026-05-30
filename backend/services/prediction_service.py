@@ -201,7 +201,7 @@ class PredictionService:
 
     def predict_all(self, db: Session) -> List[dict]:
         if not self.is_ready:
-            return [{"error": "Model chưa sẵn sàng"}]
+            raise ValueError("Model chưa sẵn sàng")
 
         now = datetime.now(VN_TZ)  # 🔥 FIX
 
@@ -216,7 +216,7 @@ class PredictionService:
         history_df = self._get_all_history(db)
 
         if history_df.empty:
-            return [{"error": "Không có dữ liệu lịch sử"}]
+            raise ValueError("Không có dữ liệu lịch sử")
 
         grouped = history_df.groupby("road_id")
 

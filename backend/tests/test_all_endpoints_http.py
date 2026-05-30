@@ -112,6 +112,25 @@ def run_all():
     res, _ = test_endpoint("Stats Feedback Summary", "/api/stats/feedback-summary")
     results.append(res)
 
+    # Test new endpoints
+    res, report_data = test_endpoint("Stats Report (Public)", "/api/stats/report")
+    results.append(res)
+    if res and report_data:
+        assert "avg_speed" in report_data, "avg_speed missing from report"
+        assert "red_count" in report_data, "red_count missing from report"
+        assert "top_congested" in report_data, "top_congested missing from report"
+        print("   -> Stats Report schema validated successfully.")
+
+    res, heatmap_data = test_endpoint("Stats Heatmap (Public)", "/api/stats/heatmap")
+    results.append(res)
+    if res and heatmap_data:
+        assert isinstance(heatmap_data, list), "heatmap_data must be a list"
+        if len(heatmap_data) > 0:
+            assert "hour" in heatmap_data[0], "hour missing from HeatmapItem"
+            assert "weekday" in heatmap_data[0], "weekday missing from HeatmapItem"
+            assert "congestion_pct" in heatmap_data[0], "congestion_pct missing from HeatmapItem"
+        print("   -> Stats Heatmap schema validated successfully.")
+
     if all(results):
         print("\n✅ All basic and statistics endpoint tests passed successfully!")
         sys.exit(0)

@@ -1,0 +1,10 @@
+/* Import variables */
+@import './variables.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body, input, select, button, textarea { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }

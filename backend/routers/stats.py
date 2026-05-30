@@ -13,7 +13,10 @@ from schemas.stats import (
     IncidentStatsResponse,
     FeedbackStatsResponse,
     TopReportedStreet,
-    TZ_DANANG
+    TZ_DANANG,
+    CongestedStreet,
+    StatsReport,
+    HeatmapItem
 )
 from auth.dependencies import require_csgt
 from models.user import User
@@ -245,29 +248,32 @@ def get_congested_by_district(
     "/hourly-trend",
     response_model=List[HourlyTrendPoint],
     summary="Diễn biến kẹt xe theo giờ trong ngày",
-    description="Trả về tốc độ trung bình và số điểm kẹt trung bình theo từng giờ trong ngày được chọn để vẽ biểu đồ đường.",
+    description="Trả về tốc độ trung bình, số điểm kẹt trung bình, và tỷ lệ kẹt xe trung bình theo từng giờ.",
 )
 def get_hourly_trend(
-    date_str: str = Query(None, description="Ngày cần thống kê (YYYY-MM-DD), mặc định là hôm nay"),
+    days: int = Query(7, description="Số ngày gần nhất cần thống kê"),
+    date_str: str = Query(None, description="Ngày cụ thể cần thống kê (định dạng YYYY-MM-DD), nếu dùng sẽ ghi đè tham số days"),
     district_id: Optional[int] = Query(None, description="Lọc theo quận (tùy chọn)"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_csgt),
 ):
     if date_str:
         try:
             target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            start_time = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=TZ_DANANG)
+            end_time = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=TZ_DANANG)
         except ValueError:
             raise HTTPException(status_code=400, detail="Định dạng ngày không hợp lệ, yêu cầu YYYY-MM-DD")
     else:
-        target_date = datetime.now(TZ_DANANG).date()
-
-    start_time = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=TZ_DANANG)
-    end_time = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=TZ_DANANG)
+        # past 'days' days
+        now = datetime.now(timezone.utc)
+        start_time = now - timedelta(days=days)
+        end_time = now
 
     query_str = """
         SELECT EXTRACT(HOUR FROM td.timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')::int AS hr,
                AVG(td.avg_speed) AS avg_speed,
-               (COUNT(CASE WHEN td.congestion_level = 2 THEN 1 END) / 12.0) AS avg_congested_count
+               (COUNT(CASE WHEN td.congestion_level = 2 THEN 1 END) / 12.0) AS avg_congested_count,
+               (COUNT(CASE WHEN td.congestion_level = 2 THEN 1 WHEN td.congestion_level = 1 THEN 0.5 END)::float / NULLIF(COUNT(td.id), 0)) * 100.0 AS avg_congestion_pct
         FROM traffic_data td
         JOIN streets s ON td.street_id = s.id
         WHERE td.timestamp >= :start_time AND td.timestamp <= :end_time
@@ -286,15 +292,15 @@ def get_hourly_trend(
     
     rows = db.execute(text(query_str), params).fetchall()
 
-    # Tạo map 24h để đảm bảo các khung giờ không có data vẫn trả về 0.0
-    trend_dict = {h: {"avg_speed": 0.0, "avg_congested_count": 0.0} for h in range(24)}
+    trend_dict = {h: {"avg_speed": 0.0, "avg_congested_count": 0.0, "avg_congestion_pct": 0.0} for h in range(24)}
     
     for row in rows:
         h = row.hr
         if h in trend_dict:
             trend_dict[h] = {
                 "avg_speed": round(row.avg_speed, 2) if row.avg_speed is not None else 0.0,
-                "avg_congested_count": round(row.avg_congested_count, 1) if row.avg_congested_count is not None else 0.0
+                "avg_congested_count": round(row.avg_congested_count, 1) if row.avg_congested_count is not None else 0.0,
+                "avg_congestion_pct": round(row.avg_congestion_pct, 2) if row.avg_congestion_pct is not None else 0.0
             }
             
     results = []
@@ -302,9 +308,129 @@ def get_hourly_trend(
         results.append(HourlyTrendPoint(
             hour=h,
             avg_speed=trend_dict[h]["avg_speed"],
-            avg_congested_count=trend_dict[h]["avg_congested_count"]
+            avg_congested_count=trend_dict[h]["avg_congested_count"],
+            avg_congestion_pct=trend_dict[h]["avg_congestion_pct"]
         ))
-        
+    return results
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4b. GET /api/stats/report — Báo cáo tình trạng giao thông tổng quan
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get(
+    "/report",
+    response_model=StatsReport,
+    summary="Báo cáo tình trạng giao thông tổng quan",
+    description="Trả về các chỉ số KPI giao thông hiện tại và danh sách top 5 tuyến đường kẹt nhất.",
+)
+def get_stats_report(db: Session = Depends(get_db)):
+    latest_ts_row = db.execute(
+        text("SELECT timestamp FROM traffic_data ORDER BY id DESC LIMIT 1")
+    ).fetchone()
+
+    if not latest_ts_row or not latest_ts_row[0]:
+        return StatsReport(
+            avg_speed=0.0,
+            red_count=0,
+            yellow_count=0,
+            green_count=0,
+            top_congested=[]
+        )
+
+    latest_timestamp = latest_ts_row[0]
+
+    stats_row = db.execute(text("""
+        SELECT 
+            COALESCE(SUM(CASE WHEN congestion_level = 0 THEN 1 ELSE 0 END), 0) AS green_count,
+            COALESCE(SUM(CASE WHEN congestion_level = 1 THEN 1 ELSE 0 END), 0) AS yellow_count,
+            COALESCE(SUM(CASE WHEN congestion_level = 2 THEN 1 ELSE 0 END), 0) AS red_count,
+            COALESCE(AVG(avg_speed), 0.0) AS avg_speed
+        FROM traffic_data
+        WHERE timestamp = :latest_timestamp
+          AND congestion_level IS NOT NULL
+    """), {"latest_timestamp": latest_timestamp}).fetchone()
+
+    top_query = text("""
+        SELECT 
+            s.name AS street_name,
+            d.name AS district_name,
+            td.avg_speed,
+            s.max_speed,
+            (td.avg_speed / COALESCE(NULLIF(s.max_speed, 0), 50)) AS ratio
+        FROM traffic_data td
+        JOIN streets s ON td.street_id = s.id
+        LEFT JOIN districts d ON s.district_id = d.id
+        WHERE td.timestamp = :latest_timestamp
+          AND td.congestion_level IS NOT NULL
+        ORDER BY td.congestion_level DESC, ratio ASC
+        LIMIT 5
+    """)
+    top_rows = db.execute(top_query, {"latest_timestamp": latest_timestamp}).fetchall()
+
+    top_congested = []
+    for row in top_rows:
+        top_congested.append(CongestedStreet(
+            street_name=row.street_name,
+            district_name=row.district_name,
+            avg_speed=round(row.avg_speed, 2)
+        ))
+
+    return StatsReport(
+        avg_speed=round(stats_row.avg_speed, 2) if stats_row else 0.0,
+        red_count=stats_row.red_count if stats_row else 0,
+        yellow_count=stats_row.yellow_count if stats_row else 0,
+        green_count=stats_row.green_count if stats_row else 0,
+        top_congested=top_congested
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4c. GET /api/stats/heatmap — Bản đồ nhiệt kẹt xe theo thứ và giờ
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get(
+    "/heatmap",
+    response_model=List[HeatmapItem],
+    summary="Bản đồ nhiệt kẹt xe theo thứ và giờ",
+    description="Trả về tỷ lệ kẹt xe trung bình phân loại theo Thứ trong tuần (0=Thứ 2, 6=Chủ nhật) và Giờ trong ngày (0-23).",
+)
+def get_stats_heatmap(db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    start_time = now - timedelta(days=30)
+
+    query_str = """
+        SELECT 
+            (EXTRACT(ISODOW FROM td.timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')::int - 1) AS wday,
+            EXTRACT(HOUR FROM td.timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')::int AS hr,
+            (COUNT(CASE WHEN td.congestion_level = 2 THEN 1 WHEN td.congestion_level = 1 THEN 0.5 END)::float / NULLIF(COUNT(td.id), 0)) * 100.0 AS avg_congestion_pct
+        FROM traffic_data td
+        WHERE td.timestamp >= :start_time
+          AND td.congestion_level IS NOT NULL
+        GROUP BY wday, hr
+        ORDER BY wday, hr
+    """
+
+    rows = db.execute(text(query_str), {"start_time": start_time}).fetchall()
+
+    heatmap_dict = {}
+    for w in range(7):
+        for h in range(24):
+            heatmap_dict[(w, h)] = 0.0
+
+    for row in rows:
+        w = row.wday
+        h = row.hr
+        if (w, h) in heatmap_dict:
+            heatmap_dict[(w, h)] = round(row.avg_congestion_pct, 2) if row.avg_congestion_pct is not None else 0.0
+
+    results = []
+    for w in range(7):
+        for h in range(24):
+            results.append(HeatmapItem(
+                weekday=w,
+                hour=h,
+                congestion_pct=heatmap_dict[(w, h)]
+            ))
+
     return results
 
 
