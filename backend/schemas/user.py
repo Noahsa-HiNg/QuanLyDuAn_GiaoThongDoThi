@@ -27,6 +27,25 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OfficerOut(BaseModel):
+    """
+    Response schema — danh sách cảnh sát giao thông (CSGT).
+
+    Chỉ trả về các trường an toàn, KHÔNG bao gồm thông tin bảo mật
+    (failed_attempts, locked_until) để có thể chia sẻ rộng hơn.
+    Cả admin lẫn csgt đều có thể gọi endpoint này.
+    """
+    id:         int
+    email:      EmailStr
+    full_name:  Optional[str]
+    role:       str           # luôn là 'csgt' trong endpoint officers
+    is_active:  bool
+    last_login: Optional[datetime]
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class UserCreateRequest(BaseModel):
     """Body cho POST /api/users — Admin tạo tài khoản mới."""
     email:     EmailStr

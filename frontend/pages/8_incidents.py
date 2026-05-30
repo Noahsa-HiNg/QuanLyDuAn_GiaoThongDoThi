@@ -19,7 +19,6 @@ from shared.components.sidebar import render_sidebar
 from shared.api.client import (
     get_incidents, create_incident,
     update_incident_status, delete_incident,
-    get_streets,
 )
 from config import APP_VERSION
 
@@ -142,7 +141,7 @@ def _show_create_dialog():
     <div style="background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);
                 border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:0.83rem;
                 color:#a5b4fc">
-      ℹ️ Điền thông tin sự cố. <b>Street ID</b> là ID tuyến đường trong hệ thống.
+      ℹ️ Điền thông tin sự cố. Điền ID tuyến đường từ hệ thống.
     </div>""", unsafe_allow_html=True)
 
     with st.form("create_incident_form", clear_on_submit=True):
@@ -185,6 +184,7 @@ def _show_create_dialog():
             st.rerun()
         else:
             st.error(f"❌ Lỗi: {res.get('error', 'Không rõ lỗi')}")
+
 
 
 # ── Header ───────────────────────────────────────────────────────────────────
@@ -333,17 +333,19 @@ else:
                             label_visibility="collapsed")
 
         with col_info:
+            street_display = f"Street ID {inc.get('street_id', '?')}"
             st.markdown(f"""
             <div class="inc-card inc-fade">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
                 <span style="font-size:1.1rem">{_TYPE_OPTS.get(inc_type, '📌')}</span>
                 <div>
-                  <span style="font-size:0.72rem;color:#64748b">#{inc_id} · Street ID {inc.get("street_id","?")} · {start}</span>
+                  <span style="font-weight:600;color:#e2e8f0;font-size:0.9rem">{street_display}</span><br>
+                  <span style="font-size:0.72rem;color:#64748b">#{inc_id} · {start}</span>
                 </div>
                 <div style="margin-left:auto">{_status_badge(status)}</div>
               </div>
               <div style="font-size:0.82rem;color:#cbd5e1;line-height:1.5">
-                {f'"{desc}"' if desc else '<span style="color:#475569">Không có mô tả</span>'}
+                {f'&ldquo;{desc}&rdquo;' if desc else '<span style="color:#475569">Không có mô tả</span>'}
               </div>
               <div style="margin-top:6px;display:flex;gap:10px;font-size:0.73rem;color:#64748b">
                 <span>⏱ Bắt đầu: <b style="color:#94a3b8">{start}</b></span>
@@ -352,6 +354,7 @@ else:
                 {'<span style="color:#4ade80">✅ Còn hiệu lực</span>' if is_act else '<span style="color:#475569">⬜ Hết hiệu lực</span>'}
               </div>
             </div>""", unsafe_allow_html=True)
+
 
         with col_actions:
             # Nút Điều động (chỉ khi active)

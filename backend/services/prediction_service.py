@@ -97,8 +97,17 @@ class PredictionService:
     # 🔥 Query ALL history
     # ──────────────────────────────────────────
 
-    def _get_all_history(self, db: Session) -> pd.DataFrame:
-        rows = db.execute(text("""
+    def _get_all_history(self, db: Session, road_id: int | None = None) -> pd.DataFrame:
+        """
+        Query lịch sử traffic. Nếu road_id != None chỉ lấy 1 đường (nhanh hơn nhiều).
+        Sửa LATERAL JOIN (rất chậm) → subquery LEFT JOIN.
+        """
+        # Filter theo đường cụ thể nếu có
+        road_filter = "WHERE t.road_id = :road_id" if road_id is not None else ""
+        params = {"road_id": road_id} if road_id is not None else {}
+        limit_clause = "LIMIT 100" if road_id is not None else ""
+
+        rows = db.execute(text(f"""
             SELECT t.road_id, t.speed, t.congestion_level, t.updated_at,
                    COALESCE(r.length, 1.0) as road_length,
                    COALESCE(r.district, '') as district,
@@ -106,14 +115,15 @@ class PredictionService:
                    COALESCE(w.rain_1h_mm, 0.0) as weather_rain
             FROM traffic_records t
             JOIN roads r ON t.road_id = r.id
-            LEFT JOIN LATERAL (
-                SELECT temperature, rain_1h_mm
-                FROM weather_snapshots
-                ORDER BY ABS(EXTRACT(EPOCH FROM (timestamp - t.updated_at)))
+            LEFT JOIN weather_snapshots w ON w.id = (
+                SELECT ws.id FROM weather_snapshots ws
+                ORDER BY ABS(EXTRACT(EPOCH FROM (ws.timestamp - t.updated_at)))
                 LIMIT 1
-            ) w ON true
-            ORDER BY t.road_id, t.updated_at
-        """)).fetchall()
+            )
+            {road_filter}
+            ORDER BY t.road_id, t.updated_at DESC
+            {limit_clause}
+        """), params).fetchall()
 
         df = pd.DataFrame(rows)
         if df.empty:
@@ -147,8 +157,8 @@ class PredictionService:
             return {"error": "Model chưa sẵn sàng", "road_id": road_id}
 
         try:
-            history_df = self._get_all_history(db)
-            road_df = history_df[history_df["road_id"] == road_id]
+            # 🔥 PERF FIX: Chỉ query đúng đường này, không load cả DB
+            road_df = self._get_all_history(db, road_id=road_id)
 
             if road_df.empty:
                 return {"error": "Không có dữ liệu", "road_id": road_id}
@@ -164,7 +174,7 @@ class PredictionService:
                 "road_id": road_id,
                 "predicted_level": pred,
                 "confidence": conf,
-                "predicted_at": datetime.now(VN_TZ).isoformat(),  # 🔥 FIX
+                "predicted_at": datetime.now(VN_TZ).isoformat(),
             }
 
         except Exception as e:

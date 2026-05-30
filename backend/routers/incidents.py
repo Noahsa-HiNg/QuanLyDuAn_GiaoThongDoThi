@@ -84,7 +84,11 @@ def get_incident(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_csgt),
 ):
-    incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    incident = (
+        db.query(Incident)
+        .filter(Incident.id == incident_id)
+        .first()
+    )
     if not incident:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -186,7 +190,7 @@ def update_incident(
 def delete_incident(
     incident_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_csgt),
+    current_user: User = Depends(require_csgt),  # CSGT cũng được xóa
 ):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:

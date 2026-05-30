@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     Lifecycle hook của FastAPI (thay thế @app.on_event deprecated).
 
     Startup : Khởi động APScheduler nếu ENABLE_CRAWL=true (mặc định).
+              Tự động tạo các DB index cần thiết.
     Shutdown: Dừng APScheduler sạch sẽ, không chờ job đang chạy.
 
     Để TẪT cào (đồng đội không muốn cào):
@@ -49,6 +50,25 @@ async def lifespan(app: FastAPI):
     """
     import os
     from services.scheduler import start_scheduler, stop_scheduler
+    from database import engine
+    from sqlalchemy import text as _text
+
+    # ── Tạo DB index hiệu năng (chỉ chạy 1 lần, idempotent) ─────────────
+    try:
+        with engine.connect() as conn:
+            conn.execute(_text("""
+                CREATE INDEX IF NOT EXISTS ix_traffic_data_street_ts
+                ON traffic_data (street_id, timestamp DESC)
+            """))
+            conn.execute(_text("""
+                CREATE INDEX IF NOT EXISTS ix_incidents_street_active
+                ON incidents (street_id, is_active)
+                WHERE is_active = TRUE
+            """))
+            conn.commit()
+        log.info("✅ DB indexes verified/created")
+    except Exception as e:
+        log.warning(f"⚠️ Không tạo được DB index (có thể chưa có bảng): {e}")
 
     enable_crawl = os.getenv("ENABLE_CRAWL", "true").strip().lower()
 
@@ -63,6 +83,7 @@ async def lifespan(app: FastAPI):
     if enable_crawl == "true":
         log.info("🛑 Server tắt — dừng APScheduler...")
         stop_scheduler()
+
 
 
 # ─────────────────────────────────────────────────────────────

@@ -31,7 +31,11 @@ DATABASE_URL = (
 )
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,  # Tự phục hồi nếu kết nối bị đứt giữa chừng
+    pool_pre_ping=True,    # Tự phục hồi nếu kết nối bị đứt giữa chừng
+    pool_size=10,          # Số connection thường trực trong pool
+    max_overflow=20,       # Số connection bổ sung khi pool đầy (tổng tối đa = 30)
+    pool_timeout=30,       # Timeout chờ connection từ pool (giây)
+    pool_recycle=1800,     # Tái tạo connection sau 30 phút (tránh idle timeout PostgreSQL)
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -136,8 +136,8 @@ def build_traffic_graph(db_session=None) -> nx.DiGraph:
                 G.add_edge(B, A, weight_km=d_km, weight_time=t_hrs, street=name)
 
     log.info(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
-    _connect_nearby_nodes(G)                 # Pass 1: nối ngã tư ≤ 80m
-    _bridge_isolated_components(G)           # Pass 2: nối component cô lập ≤ 1km
+    _connect_nearby_nodes(G, threshold_km=0.10)   # Pass 1: nối ngã tư/đầu cầu ≤ 100m
+    _bridge_isolated_components(G, max_gap_km=2.0) # Pass 2: nối component cô lập ≤ 2km
     comps = nx.number_weakly_connected_components(G)
     log.info(f"Final: {G.number_of_edges()} edges, {comps} components")
     return G
@@ -353,17 +353,65 @@ def _get_cached(db_session=None):
     Trả về (Graph, KDTree, nodes) từ cache.
     Tự động dựng lại nếu cache hết hạn (> CACHE_TTL giây).
 
-    [Fix #4] Dùng threading.Lock để đảm bảo chỉ 1 thread rebuild graph
-    khi nhiều request FastAPI đến cùng lúc.
+    [Perf Fix] Serve-stale pattern:
+      - Cache còn mới → trả về ngay (không lock).
+      - Cache hết hạn + graph ĐÃ CÓ → trả về kết quả cũ NGAY,
+        đồng thời rebuild trong background thread (không block request).
+      - Cache hết hạn + graph CHƯA CÓ (lần đầu khởi động) → rebuild đồng bộ.
     """
+    now = _time.time()
+
+    # ── Fast path: cache còn hạn, không cần lock ────────────────────────────
+    if (_cache["graph"] is not None
+            and (now - _cache["built_at"]) <= CACHE_TTL):
+        return _cache["graph"], _cache["tree"], _cache["nodes"]
+
+    # ── Cache hết hạn ───────────────────────────────────────────────────────
     with _cache_lock:
+        # Double-check sau khi lấy lock (tránh rebuild lại khi thread khác vừa xong)
         now = _time.time()
-        if _cache["graph"] is None or (now - _cache["built_at"]) > CACHE_TTL:
-            log.info("Rebuilding traffic graph...")
+        if (_cache["graph"] is not None
+                and (now - _cache["built_at"]) <= CACHE_TTL):
+            return _cache["graph"], _cache["tree"], _cache["nodes"]
+
+        if _cache["graph"] is None:
+            # Lần đầu khởi động: bắt buộc phải build đồng bộ (chưa có gì để serve)
+            log.info("🔨 Lần đầu build traffic graph (đồng bộ)...")
             G = build_traffic_graph(db_session)
             tree, nodes = _build_kdtree(G)
-            _cache.update(graph=G, tree=tree, nodes=nodes, built_at=now)
+            _cache.update(graph=G, tree=tree, nodes=nodes, built_at=_time.time())
+        else:
+            # Cache hết hạn nhưng đã có dữ liệu cũ → serve stale, rebuild nền
+            if not _cache.get("_rebuilding", False):
+                _cache["_rebuilding"] = True
+                log.info("⏳ Cache hết hạn — rebuild nền, serving kết quả cũ...")
+
+                def _rebuild_bg():
+                    try:
+                        # Dùng session riêng cho background thread
+                        from database import SessionLocal
+                        _db = SessionLocal()
+                        try:
+                            G_new = build_traffic_graph(_db)
+                            tree_new, nodes_new = _build_kdtree(G_new)
+                            with _cache_lock:
+                                _cache.update(
+                                    graph=G_new, tree=tree_new,
+                                    nodes=nodes_new, built_at=_time.time(),
+                                    _rebuilding=False,
+                                )
+                            log.info("✅ Background rebuild hoàn tất")
+                        finally:
+                            _db.close()
+                    except Exception as e:
+                        log.error(f"❌ Background rebuild lỗi: {e}")
+                        with _cache_lock:
+                            _cache["_rebuilding"] = False
+
+                threading.Thread(target=_rebuild_bg, daemon=True).start()
+
     return _cache["graph"], _cache["tree"], _cache["nodes"]
+
 
 
 def get_route(

@@ -1,0 +1,77 @@
+{
+  "timestamp": "2026-05-30 10:53:55",
+  "backend_url": "http://localhost:8000",
+  "n_runs": 5,
+  "results": [
+    {
+      "label": "GET /api/health",
+      "avg_ms": 30000,
+      "min_ms": 30000,
+      "max_ms": 30000,
+      "p95_ms": 30000
+    },
+    {
+      "label": "GET / (redirect)",
+      "avg_ms": 30000,
+      "min_ms": 30000,
+      "max_ms": 30000,
+      "p95_ms": 30000
+    },
+    {
+      "label": "GET /api/streets",
+      "avg_ms": 30000,
+      "min_ms": 30000,
+      "max_ms": 30000,
+      "p95_ms": 30000
+    },
+    {
+      "label": "GET /api/traffic/state",
+      "avg_ms": 30000,
+      "min_ms": 30000,
+      "max_ms": 30000,
+      "p95_ms": 30000
+    },
+    {
+      "label": "GET /api/traffic/streets-geometry",
+      "avg_ms": 30000,
+      "min_ms": 30000,
+      "max_ms": 30000,
+      "p95_ms": 30000
+    },
+    {
+      "label": "GET /api/traffic/current",
+      "avg_ms": 30000,
+      "min_ms": 30000,
+      "max_ms": 30000,
+      "p95_ms": 30000
+    },
+    {
+      "label": "GET /api/routes (shortest)",
+      "avg_ms": 868.4659200021997,
+      "min_ms": 328.637600003276,
+      "max_ms": 2626.240700017661,
+      "p95_ms": 2626.240700017661
+    },
+    {
+      "label": "GET /api/routes (fastest)",
+      "avg_ms": 367.7752399991732,
+      "min_ms": 306.6320999932941,
+      "max_ms": 427.8092000167817,
+      "p95_ms": 427.8092000167817
+    },
+    {
+      "label": "GET /api/predict/30min",
+      "avg_ms": 349.259240005631,
+      "min_ms": 332.0876999932807,
+      "max_ms": 368.3434000122361,
+      "p95_ms": 368.3434000122361
+    },
+    {
+      "label": "GET /api/stats/summary",
+      "avg_ms": 403.48417999921367,
+      "min_ms": 345.6587000109721,
+      "max_ms": 436.76549999509007,
+      "p95_ms": 436.76549999509007
+    }
+  ]
+}

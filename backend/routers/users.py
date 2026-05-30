@@ -12,12 +12,12 @@ Endpoints:
 Tất cả endpoint đều yêu cầu quyền Admin.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from database import get_db
 from models.user import User
-from schemas.user import UserOut, UserCreateRequest, UserLockRequest
-from auth.dependencies import require_admin
+from schemas.user import UserOut, UserCreateRequest, UserLockRequest, OfficerOut
+from auth.dependencies import require_admin, require_csgt
 from auth.password import hash_password
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -37,6 +37,49 @@ def list_users(
 ):
     """Trả về danh sách tất cả tài khoản. Chỉ Admin được xem."""
     return db.query(User).order_by(User.created_at.desc()).all()
+
+
+# ─────────────────────────────────────────────────────────────
+# GET /api/users/officers — Danh sách cảnh sát giao thông
+# ─────────────────────────────────────────────────────────────
+@router.get(
+    "/officers",
+    response_model=list[OfficerOut],
+    summary="Danh sách cảnh sát giao thông (CSGT)",
+    description="""
+Trả về danh sách tài khoản CSGT trong hệ thống.
+
+- **Quyền truy cập**: cả `admin` lẫn `csgt` đều gọi được.
+- **active_only** (mặc định `true`): chỉ trả về tài khoản đang hoạt động.
+- **search**: lọc theo tên hoặc email (không phân biệt hoa thường).
+- Không bao gồm thông tin bảo mật (failed_attempts, locked_until).
+""",
+)
+def list_officers(
+    active_only: bool = Query(True,  description="Chỉ trả về tài khoản còn hoạt động"),
+    search:      str  = Query("",    description="Tìm kiếm theo tên hoặc email"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_csgt),
+):
+    """
+    Danh sách CSGT — trả về OfficerOut (không có trường nhạy cảm).
+
+    Query params:
+        active_only : bool  (default True)  — lọc is_active=True
+        search      : str   (default "")    — tìm theo email hoặc full_name
+    """
+    q = db.query(User).filter(User.role == "csgt")
+
+    if active_only:
+        q = q.filter(User.is_active == True)  # noqa: E712
+
+    if search and search.strip():
+        term = f"%{search.strip().lower()}%"
+        q = q.filter(
+            (User.full_name.ilike(term)) | (User.email.ilike(term))
+        )
+
+    return q.order_by(User.full_name.asc()).all()
 
 
 # ─────────────────────────────────────────────────────────────
