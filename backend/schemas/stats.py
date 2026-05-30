@@ -57,6 +57,7 @@ class HourlyTrendPoint(BaseModel):
     hour: int
     avg_speed: float
     avg_congested_count: float    # Số lượng đường kẹt đỏ trung bình trong giờ đó
+    avg_congestion_pct: Optional[float] = 0.0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -83,6 +84,32 @@ class FeedbackStatsResponse(BaseModel):
     total_reports: int
     by_type: dict[str, int]
     top_reported_streets: list[TopReportedStreet]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CongestedStreet(BaseModel):
+    street_name: str
+    district_name: Optional[str] = None
+    avg_speed: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StatsReport(BaseModel):
+    avg_speed: float
+    red_count: int
+    yellow_count: int
+    green_count: int
+    top_congested: list[CongestedStreet]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HeatmapItem(BaseModel):
+    hour: int
+    weekday: int
+    congestion_pct: float
 
     model_config = ConfigDict(from_attributes=True)
 

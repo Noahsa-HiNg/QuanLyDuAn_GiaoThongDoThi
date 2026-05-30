@@ -46,13 +46,11 @@ log = logging.getLogger("traffic_crawl")
 
 def crawl_all_once(db: Session) -> dict:
     """
-    Cào toàn bộ tất cả đường đúng 1 lần.
-
-    Không xóa dữ liệu lịch sử (bảo toàn dataset ML).
-    Trả về dict tóm tắt: streets_total, streets_success, records_saved, ...
+    Cào toàn bộ tất cả đường đúng 1 lần bằng HERE API.
     """
-    log.info("🔔 [CHẾ ĐỘ 1] Cào toàn bộ đường — 1 lần")
-    return _run_single_cycle(db, label="[1-lần]")
+    log.info("🔔 [CHẾ ĐỘ 1] Cào toàn bộ đường — 1 lần bằng HERE API")
+    from services.ingestion import run_crawl_cycle
+    return run_crawl_cycle(db, retention_days=0, with_weather=False)
 
 
 # ─── CHẾ ĐỘ 2: CÀO TOÀN BỘ LẶP LẠI ─────────────────────────────────────────

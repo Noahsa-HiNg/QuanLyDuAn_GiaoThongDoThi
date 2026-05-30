@@ -1,14 +1,7 @@
 {
-  "train": {
-    "accuracy": 0.8043,
-    "f1_weighted": 0.7774,
-    "rmse": 0.4587
-  },
-  "test": {
-    "accuracy": 0.7991,
-    "f1_weighted": 0.7693,
-    "rmse": 0.4687
-  },
+  "accuracy": 0.8265,
+  "f1_weighted": 0.802,
+  "rmse": 0.4165,
   "best_params": {
     "max_depth": 8,
     "min_samples_split": 2,
@@ -16,5 +9,5 @@
   },
   "n_train": 13440,
   "n_test": 3360,
-  "trained_at": "2026-05-09T01:52:09.130097"
+  "trained_at": "2026-04-24T01:19:32.575688"
 }

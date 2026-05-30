@@ -17,7 +17,7 @@ from ml.features import compute_features
 
 logger = logging.getLogger(__name__)
 
-MODEL_DIR    = os.path.join(os.path.dirname(__file__), "../../ml/models")
+MODEL_DIR    = os.path.join(os.path.dirname(__file__), "../ml/models")
 MODEL_PATH   = os.path.join(MODEL_DIR, "rf_model.pkl")
 SCALER_PATH  = os.path.join(MODEL_DIR, "scaler.pkl")
 METRICS_PATH = os.path.join(MODEL_DIR, "metrics.json")
@@ -86,42 +86,56 @@ class PredictionService:
     # ──────────────────────────────────────────
 
     def _get_all_roads(self, db: Session) -> list:
+        from data.manual_coords import MANUAL_COORDS
+        allowed_names = list(MANUAL_COORDS.keys())
+        
         rows = db.execute(text("""
-            SELECT r.id as road_id, r.road_name, r.lat, r.lng
-            FROM roads r
-        """)).fetchall()
+            SELECT s.id as road_id, s.name as road_name,
+                   COALESCE(ST_Y(ST_Centroid(s.geometry)), 16.0) as lat,
+                   COALESCE(ST_X(ST_Centroid(s.geometry)), 108.0) as lng
+            FROM streets s
+            WHERE s.name = ANY(:names)
+        """), {"names": allowed_names}).fetchall()
 
         return [dict(row._mapping) for row in rows]
 
     # ──────────────────────────────────────────
     # 🔥 Query ALL history
     # ──────────────────────────────────────────
-
     def _get_all_history(self, db: Session, road_id: int | None = None) -> pd.DataFrame:
         """
-        Query lịch sử traffic. Nếu road_id != None chỉ lấy 1 đường (nhanh hơn nhiều).
-        Sửa LATERAL JOIN (rất chậm) → subquery LEFT JOIN.
+        Query lịch sử traffic. Chỉ lấy dữ liệu trong vòng 3 giờ gần nhất để tránh OOM
+        và nghẽn DB (timeout) khi cơ sở dữ liệu có hàng triệu bản ghi.
         """
-        # Filter theo đường cụ thể nếu có
-        road_filter = "WHERE t.road_id = :road_id" if road_id is not None else ""
-        params = {"road_id": road_id} if road_id is not None else {}
-        limit_clause = "LIMIT 100" if road_id is not None else ""
+        from data.manual_coords import MANUAL_COORDS
+        allowed_names = list(MANUAL_COORDS.keys())
+
+        if road_id is not None:
+            road_filter = "WHERE t.street_id = :road_id AND t.timestamp >= NOW() - INTERVAL '3 hours'"
+            params = {"road_id": road_id}
+            limit_clause = "LIMIT 100"
+        else:
+            road_filter = "WHERE s.name = ANY(:names) AND t.timestamp >= NOW() - INTERVAL '3 hours'"
+            params = {"names": allowed_names}
+            limit_clause = ""
 
         rows = db.execute(text(f"""
-            SELECT t.road_id, t.speed, t.congestion_level, t.updated_at,
-                   COALESCE(r.length, 1.0) as road_length,
-                   COALESCE(r.district, '') as district,
+            SELECT t.street_id as road_id, t.avg_speed as speed, t.congestion_level, t.timestamp as updated_at,
+                   COALESCE(s.length_km, 1.0) as road_length,
+                   COALESCE(d.name, '') as district,
                    COALESCE(w.temperature, 28.0) as weather_temp,
                    COALESCE(w.rain_1h_mm, 0.0) as weather_rain
-            FROM traffic_records t
-            JOIN roads r ON t.road_id = r.id
+            FROM traffic_data t
+            JOIN streets s ON t.street_id = s.id
+            LEFT JOIN districts d ON s.district_id = d.id
             LEFT JOIN weather_snapshots w ON w.id = (
                 SELECT ws.id FROM weather_snapshots ws
-                ORDER BY ABS(EXTRACT(EPOCH FROM (ws.timestamp - t.updated_at)))
+                WHERE ws.timestamp >= NOW() - INTERVAL '3 hours'
+                ORDER BY ABS(EXTRACT(EPOCH FROM (ws.timestamp - t.timestamp)))
                 LIMIT 1
             )
             {road_filter}
-            ORDER BY t.road_id, t.updated_at DESC
+            ORDER BY t.street_id, t.timestamp DESC
             {limit_clause}
         """), params).fetchall()
 
@@ -187,7 +201,7 @@ class PredictionService:
 
     def predict_all(self, db: Session) -> List[dict]:
         if not self.is_ready:
-            return [{"error": "Model chưa sẵn sàng"}]
+            raise ValueError("Model chưa sẵn sàng")
 
         now = datetime.now(VN_TZ)  # 🔥 FIX
 
@@ -202,7 +216,7 @@ class PredictionService:
         history_df = self._get_all_history(db)
 
         if history_df.empty:
-            return [{"error": "Không có dữ liệu lịch sử"}]
+            raise ValueError("Không có dữ liệu lịch sử")
 
         grouped = history_df.groupby("road_id")
 
