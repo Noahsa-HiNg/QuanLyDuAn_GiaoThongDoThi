@@ -78,6 +78,21 @@ def post_login(email: str, password: str) -> dict:
         return {}
 
 
+def get_traffic_csv(date: str) -> bytes | None:
+    """GET /api/export/traffic?date=YYYY-MM-DD — trả về nội dung file CSV."""
+    try:
+        resp = httpx.get(
+            f"{BACKEND_URL}/api/export/traffic",
+            params={"date": date},
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return resp.content
+    except Exception as e:
+        print(f"ERROR calling get_traffic_csv: {e}")
+        return None
+
+
 # ── Sprint 3 — SCRUM 36–39 ────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)   # 5 phút — predictions ít thay đổi trong ngắn hạn
