@@ -28,7 +28,7 @@ const AdminUsers: React.FC = () => {
   // Form states
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<'admin' | 'csgt' | 'user'>('user');
+  const [role, setRole] = useState<'admin' | 'csgt'>('csgt');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -47,7 +47,16 @@ const AdminUsers: React.FC = () => {
       resetForm();
     },
     onError: (err: any) => {
-      setFormError(err.response?.data?.detail || 'Lỗi khi tạo người dùng mới.');
+      const detail = err.response?.data?.detail;
+      let errMsg = 'Lỗi khi tạo người dùng mới.';
+      if (typeof detail === 'string') {
+        errMsg = detail;
+      } else if (Array.isArray(detail)) {
+        errMsg = detail.map((d: any) => `${d.loc?.join('.') || ''}: ${d.msg || ''}`).join('; ');
+      } else if (detail && typeof detail === 'object') {
+        errMsg = JSON.stringify(detail);
+      }
+      setFormError(errMsg);
     },
   });
 
@@ -75,7 +84,7 @@ const AdminUsers: React.FC = () => {
   const resetForm = () => {
     setEmail('');
     setFullName('');
-    setRole('user');
+    setRole('csgt');
     setPassword('');
     setFormError(null);
   };
@@ -320,7 +329,6 @@ const AdminUsers: React.FC = () => {
                   onChange={(e: any) => setRole(e.target.value)}
                   className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
                 >
-                  <option value="user">User (Thành viên cộng đồng)</option>
                   <option value="csgt">CSGT (Điều phối giao thông)</option>
                   <option value="admin">Admin (Quản trị hệ thống)</option>
                 </select>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { statsApi } from '../../api/stats.api';
 import { incidentsApi } from '../../api/incidents.api';
+import { usersApi } from '../../api/users.api';
 import { useGeometry } from '../../hooks/useGeometry';
 import TrafficMap from '../../components/map/TrafficMap';
 import { 
@@ -16,6 +17,8 @@ const CsgtDashboard: React.FC = () => {
   const queryClient = useQueryClient();
   const [selectedStreet, setSelectedStreet] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [clickCoords, setClickCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedOfficerId, setSelectedOfficerId] = useState<number | null>(null);
 
   // Form states
   const [incidentType, setIncidentType] = useState<'accident' | 'roadblock' | 'event' | 'community'>('accident');
@@ -41,6 +44,12 @@ const CsgtDashboard: React.FC = () => {
     refetchInterval: 10000, // 10s auto-refresh
   });
 
+  // Fetch active CSGT officers
+  const { data: officers = [] } = useQuery({
+    queryKey: ['activeOfficers'],
+    queryFn: () => usersApi.getOfficers(),
+  });
+
   // 4. Create Incident Mutation
   const createIncidentMutation = useMutation({
     mutationFn: (data: any) => incidentsApi.createIncident(data),
@@ -50,6 +59,8 @@ const CsgtDashboard: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['statsReport'] });
       setIsModalOpen(false);
       setSelectedStreet(null);
+      setClickCoords(null);
+      setSelectedOfficerId(null);
       setDescription('');
       setSubmitError(null);
     },
@@ -66,10 +77,12 @@ const CsgtDashboard: React.FC = () => {
     },
   });
 
-  const handleOpenDispatch = (streetName: string) => {
+  const handleOpenDispatch = (streetName: string, coords?: { lat: number; lng: number }) => {
     setSelectedStreet(streetName);
+    setClickCoords(coords || null);
     setIsModalOpen(true);
     setDescription(`🚔 Điều phối lực lượng CSGT điều tiết giao thông tại khu vực đường ${streetName} do ùn tắc nghiêm trọng.`);
+    setSelectedOfficerId(null);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -94,6 +107,9 @@ const CsgtDashboard: React.FC = () => {
       description,
       status,
       is_active: status !== 'resolved',
+      latitude: clickCoords?.lat ?? null,
+      longitude: clickCoords?.lng ?? null,
+      officer_id: selectedOfficerId,
     });
   };
 
@@ -337,6 +353,30 @@ const CsgtDashboard: React.FC = () => {
                 >
                   <option value="dispatched">🚔 Đã điều động tuần tra</option>
                   <option value="active">⚠️ Đang xảy ra sự cố</option>
+                </select>
+              </div>
+
+              {/* Officer assignment select */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Chiến sĩ được phân công
+                </label>
+                <select
+                  value={selectedOfficerId || ''}
+                  onChange={(e: any) => setSelectedOfficerId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full bg-slate-950/60 text-slate-200 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">-- Chưa phân công --</option>
+                  {officers.map((off: any) => {
+                    const busy = (activeIncidents ?? []).some(
+                      (inc) => inc.officer_id === off.id && inc.status !== 'resolved'
+                    );
+                    return (
+                      <option key={off.id} value={off.id}>
+                        {off.full_name} ({off.email}) {busy ? '🔴 [Đang bận]' : '🟢 [Sẵn sàng]'}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
