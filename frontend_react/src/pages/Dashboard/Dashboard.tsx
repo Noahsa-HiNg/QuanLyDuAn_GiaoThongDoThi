@@ -666,7 +666,7 @@ const Dashboard: React.FC = () => {
                       Đang xử lý thuật toán dự báo AI...
                     </div>
                   ) : filteredPredictions.length > 0 ? (
-                    <div className="overflow-x-auto border border-white/5 rounded-xl max-h-[280px] overflow-y-auto">
+                    <div className="overflow-x-auto border border-white/5 rounded-xl max-h-[280px] overflow-y-auto custom-scrollbar">
                       <table className="w-full text-[11px] border-collapse text-left">
                         <thead>
                           <tr className="border-b border-white/10 bg-slate-950/50 sticky top-0 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
@@ -770,7 +770,7 @@ const Dashboard: React.FC = () => {
                 ))}
               </div>
             ) : report && report.top_congested && report.top_congested.length > 0 ? (
-              <div className="divide-y divide-white/5 overflow-y-auto max-h-[380px] pr-1">
+              <div className="divide-y divide-white/5 overflow-y-auto custom-scrollbar max-h-[380px] pr-1">
                 {report.top_congested.map((item, index) => (
                   <div key={`congested-street-${index}`} className="py-3 flex items-center justify-between first:pt-0 last:pb-0 gap-3">
                     <div className="min-w-0">

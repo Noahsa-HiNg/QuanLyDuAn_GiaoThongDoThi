@@ -73,21 +73,21 @@ const Navbar: React.FC = () => {
           <Map size={16} />
           Bản đồ
         </Link>
-        <Link to="/route-finder" className={linkClass('/route-finder')}>
+        <Link to="/route-finder" id="btn-routing-toggle" className={linkClass('/route-finder')}>
           <Navigation size={16} />
           Tìm đường
         </Link>
         {isCSGTOrAdmin && (
           <>
-            <Link to="/dashboard" className={linkClass('/dashboard')}>
+            <Link to="/dashboard" id="nav-stats" className={linkClass('/dashboard')}>
               <BarChart2 size={16} />
               Thống kê
             </Link>
-            <Link to="/csgt-dashboard" className={linkClass('/csgt-dashboard')}>
+            <Link to="/csgt-dashboard" id="nav-csgt" className={linkClass('/csgt-dashboard')}>
               <Shield size={16} />
               CSGT
             </Link>
-            <Link to="/incidents" className={linkClass('/incidents')}>
+            <Link to="/incidents" id="nav-incidents" className={linkClass('/incidents')}>
               <AlertCircle size={16} />
               Sự cố
             </Link>
@@ -100,7 +100,7 @@ const Navbar: React.FC = () => {
               <Users size={16} />
               Tài khoản
             </Link>
-            <Link to="/admin/scheduler" className={linkClass('/admin/scheduler')}>
+            <Link to="/admin/scheduler" id="nav-scheduler" className={linkClass('/admin/scheduler')}>
               <Calendar size={16} />
               Scheduler
             </Link>

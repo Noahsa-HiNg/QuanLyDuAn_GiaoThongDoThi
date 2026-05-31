@@ -12,8 +12,16 @@ export const historyApi = {
     const response = await api.get<TrafficHistoryResponse>(`/api/traffic/history?hours_ago=${hoursAgo}`);
     return response.data;
   },
-  getPrediction5Min: async (): Promise<any[]> => {
-    const response = await api.get<any[]>('/api/predict/5min');
+  getPrediction10Min: async (): Promise<any[]> => {
+    const response = await api.get<any[]>('/api/predict/10min');
+    return response.data;
+  },
+  getPrediction20Min: async (): Promise<any[]> => {
+    const response = await api.get<any[]>('/api/predict/20min');
+    return response.data;
+  },
+  getPrediction30Min: async (): Promise<any[]> => {
+    const response = await api.get<any[]>('/api/predict/30min');
     return response.data;
   },
 };

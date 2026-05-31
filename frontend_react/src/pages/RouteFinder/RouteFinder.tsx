@@ -160,7 +160,7 @@ const RouteFinder: React.FC = () => {
   return (
     <div className="route-finder-container w-full h-[calc(100vh-64px)] mt-16 flex flex-col md:flex-row overflow-hidden">
       {/* 1. Left Form Panel */}
-      <div className="w-full md:w-[420px] bg-slate-950/80 backdrop-blur-md border-r border-white/10 shadow-2xl flex flex-col h-full overflow-y-auto text-white">
+      <div className="w-full md:w-[420px] bg-slate-950/80 backdrop-blur-md border-r border-white/10 shadow-2xl flex flex-col h-full overflow-y-auto custom-scrollbar text-white">
         <div className="p-5 flex-grow">
           {/* Header */}
           <div className="mb-6">
@@ -212,7 +212,7 @@ const RouteFinder: React.FC = () => {
               </div>
               {/* Autocomplete Suggestions */}
               {fromSuggestions.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-48 overflow-y-auto">
+                <div className="absolute left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-48 overflow-y-auto custom-scrollbar">
                   {fromSuggestions.map((street) => (
                     <button
                       key={`from-sug-${street.id}`}
@@ -284,7 +284,7 @@ const RouteFinder: React.FC = () => {
               </div>
               {/* Autocomplete Suggestions */}
               {toSuggestions.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-48 overflow-y-auto">
+                <div className="absolute left-0 right-0 mt-1 bg-slate-900 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-48 overflow-y-auto custom-scrollbar">
                   {toSuggestions.map((street) => (
                     <button
                       key={`to-sug-${street.id}`}
@@ -444,7 +444,7 @@ const RouteFinder: React.FC = () => {
             <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1">
               <ListOrdered size={12} /> Các đường đi qua ({streetStatuses.length})
             </h4>
-            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
               {streetStatuses.map((st: any, idx: number) => (
                 <div
                   key={`route-street-${idx}`}
@@ -478,7 +478,7 @@ const RouteFinder: React.FC = () => {
 
       {/* 2. Right Map Panel */}
       <div className="flex-grow h-full relative">
-        <TrafficMap hideTrafficLines={true}>
+        <TrafficMap hideTrafficLines={true} pageContext="route-finder">
           {(map) => (
             <RouteLayer map={map} />
           )}

@@ -452,7 +452,7 @@ const CsgtDashboard: React.FC = () => {
                 ))}
               </div>
             ) : report && report.top_congested && report.top_congested.length > 0 ? (
-              <div className="divide-y divide-white/5 max-h-[360px] overflow-y-auto pr-1">
+              <div className="divide-y divide-white/5 max-h-[360px] overflow-y-auto custom-scrollbar pr-1">
                 {report.top_congested.map((street, idx) => (
                   <div key={`csgt-hot-${idx}`} className="py-3 flex items-center justify-between first:pt-0 last:pb-0 gap-3">
                     <div className="min-w-0">
@@ -511,6 +511,7 @@ const CsgtDashboard: React.FC = () => {
                 onVerifyReport={handleVerifyReport}
                 onVerifyCluster={handleVerifyCluster}
                 flyToCoords={mapFlyToCoords}
+                pageContext="csgt"
               />
             </div>
           </div>

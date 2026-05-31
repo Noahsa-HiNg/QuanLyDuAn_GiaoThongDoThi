@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
+import Papa from 'papaparse';
+import { Camera, Layers, Box, Eye, EyeOff } from 'lucide-react';
 import { DA_NANG_CENTER, DEFAULT_ZOOM } from '../../constants/map.constants';
 import { useGeometry } from '../../hooks/useGeometry';
 import { useTrafficData } from '../../hooks/useTrafficData';
@@ -48,6 +50,8 @@ interface TrafficMapProps {
   isCsgtView?: boolean;
   onVerifyReport?: (id: number) => void;
   onVerifyCluster?: (ids: number[]) => void;
+  hasActiveAlert?: boolean;
+  pageContext?: 'home' | 'route-finder' | 'csgt';
   children?: (map: mapboxgl.Map) => React.ReactNode;
 }
 
@@ -70,12 +74,25 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
   isCsgtView = false,
   onVerifyReport,
   onVerifyCluster,
+  hasActiveAlert = false,
+  pageContext = 'home',
   children,
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<mapboxgl.Map | null>(null);
   const [mapInstance, setMapInstance] = useState<mapboxgl.Map | null>(null);
   const [currentZoom, setCurrentZoom] = useState(DEFAULT_ZOOM);
+
+  const [localIs3D, setLocalIs3D] = useState(is3D);
+  const [localHideTraffic, setLocalHideTraffic] = useState(hideTrafficLines);
+
+  useEffect(() => {
+    setLocalIs3D(is3D);
+  }, [is3D]);
+
+  useEffect(() => {
+    setLocalHideTraffic(hideTrafficLines);
+  }, [hideTrafficLines]);
 
   useEffect(() => {
     const map = mapInstance;
@@ -98,9 +115,12 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
     onReportClickRef.current = onReportClick;
   }, [onStreetClick, isReportMode, onReportClick]);
 
+  const [snapshotData, setSnapshotData] = useState<any[] | null>(null);
   const { data: geometry, isLoading: isGeomLoading, error: geomError } = useGeometry();
   const { data: liveTrafficState, isLoading: isStateLoading, error: stateError } = useTrafficData();
-  const trafficState = propsTrafficState || liveTrafficState;
+  const trafficState = snapshotData
+    ? { total: snapshotData.length, streets: snapshotData }
+    : (propsTrafficState || liveTrafficState);
 
   // 1. Initialize Map
   useEffect(() => {
@@ -111,6 +131,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       style: 'mapbox://styles/mapbox/light-v11',
       center: DA_NANG_CENTER,
       zoom: DEFAULT_ZOOM,
+      preserveDrawingBuffer: true,
     });
 
     map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
@@ -214,7 +235,10 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
         if (isPredictionMode && predictionData) {
           const predMap = new Map<number, number>();
           for (const p of predictionData) {
-            predMap.set(p.street_id, p.predicted_level);
+            const id = p.road_id ?? p.street_id;
+            if (id !== undefined && id !== null) {
+              predMap.set(id, p.predicted_level);
+            }
           }
           geojson.features.forEach((f) => {
             if (f.properties) {
@@ -275,7 +299,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
             map.setLayoutProperty(
               'traffic-lines',
               'visibility',
-              hideTrafficLines ? 'none' : 'visible'
+              localHideTraffic ? 'none' : 'visible'
             );
           }
         } else {
@@ -291,7 +315,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
             layout: { 
               'line-join': 'round', 
               'line-cap': 'round',
-              'visibility': hideTrafficLines ? 'none' : 'visible'
+              'visibility': localHideTraffic ? 'none' : 'visible'
             },
             paint: {
               'line-color': [
@@ -327,10 +351,10 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
         map.off('style.load', updateSource);
       } catch (e) {}
     };
-  }, [geometry, trafficState, isPredictionMode, predictionData, hideTrafficLines, districtId, congestionLevel, searchQuery]);
+  }, [geometry, trafficState, isPredictionMode, predictionData, localHideTraffic, districtId, congestionLevel, searchQuery]);
 
 
-  // Apply layer visibility based on hideTrafficLines prop
+  // Apply layer visibility based on localHideTraffic state
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -340,7 +364,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
         map.setLayoutProperty(
           'traffic-lines',
           'visibility',
-          hideTrafficLines ? 'none' : 'visible'
+          localHideTraffic ? 'none' : 'visible'
         );
       }
     };
@@ -356,7 +380,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
         map.off('style.load', updateVisibility);
       } catch (e) {}
     };
-  }, [hideTrafficLines, mapInstance]);
+  }, [localHideTraffic, mapInstance]);
 
   // Handle 3D buildings toggle and map pitch rotation
   useEffect(() => {
@@ -365,8 +389,8 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
 
     // Camera tilt transition
     map.easeTo({
-      pitch: is3D ? 60 : 0,
-      bearing: is3D ? -15 : 0,
+      pitch: localIs3D ? 60 : 0,
+      bearing: localIs3D ? -15 : 0,
       duration: 1000,
     });
 
@@ -585,11 +609,11 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
     };
 
     const handleStyleLoad = () => {
-      toggle3DBuildings(map, is3D);
+      toggle3DBuildings(map, localIs3D);
     };
 
     if (map.isStyleLoaded()) {
-      toggle3DBuildings(map, is3D);
+      toggle3DBuildings(map, localIs3D);
     } else {
       map.on('style.load', handleStyleLoad);
     }
@@ -599,7 +623,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
         map.off('style.load', handleStyleLoad);
       } catch (e) {}
     };
-  }, [is3D, mapInstance]);
+  }, [localIs3D, mapInstance]);
 
   // Render incident markers on the map
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -907,6 +931,90 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
     map.getCanvas().style.cursor = isReportMode ? 'crosshair' : '';
   }, [isReportMode, mapInstance]);
 
+  // Snapshot UI and action handlers
+  const [snapshotMenuOpen, setSnapshotMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExportPNG = () => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    try {
+      const canvas = map.getCanvas();
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      const filename = `traffic-map-snapshot-${new Date().toISOString().replace(/:/g, '-').replace(/\./g, '_')}.png`;
+      link.download = filename;
+      link.href = dataUrl;
+      link.click();
+      setSnapshotMenuOpen(false);
+    } catch (err) {
+      console.error(err);
+      alert('Không thể xuất ảnh chụp bản đồ. Đảm bảo bản đồ đã tải xong.');
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (!trafficState || !trafficState.streets) return;
+    try {
+      const data = trafficState.streets.map((s: any) => ({
+        street_id: s.street_id,
+        street_name: s.street_name || '',
+        congestion_level: s.congestion_level ?? 0,
+        avg_speed: s.avg_speed ?? 0,
+        max_speed: s.max_speed ?? 0,
+      }));
+      const csv = Papa.unparse(data);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const filename = `traffic-data-snapshot-${new Date().toISOString().replace(/:/g, '-').replace(/\./g, '_')}.csv`;
+      link.download = filename;
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      setSnapshotMenuOpen(false);
+    } catch (err) {
+      console.error(err);
+      alert('Lỗi khi xuất dữ liệu CSV.');
+    }
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      dynamicTyping: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          const parsed = results.data as any[];
+          // Validate structure
+          const valid = parsed.every(row => 'street_id' in row && 'congestion_level' in row);
+          if (!valid) {
+            alert('Tệp CSV không đúng định dạng. Cần có cột street_id và congestion_level.');
+            return;
+          }
+          const mapped = parsed.map(row => ({
+            street_id: Number(row.street_id),
+            street_name: row.street_name || '',
+            congestion_level: row.congestion_level !== undefined ? Number(row.congestion_level) : 0,
+            avg_speed: row.avg_speed !== undefined ? Number(row.avg_speed) : 0,
+            max_speed: row.max_speed !== undefined ? Number(row.max_speed) : 0,
+          }));
+          setSnapshotData(mapped);
+          setSnapshotMenuOpen(false);
+        } catch (err) {
+          console.error(err);
+          alert('Lỗi phân tích cú pháp tệp CSV.');
+        }
+      },
+      error: (err) => {
+        console.error(err);
+        alert('Không thể đọc tệp CSV.');
+      }
+    });
+    e.target.value = '';
+  };
 
   if (!mapboxToken) {
     return (
@@ -935,6 +1043,117 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
             <p className="text-gray-600 font-medium">Đang tải bản đồ Đà Nẵng...</p>
           </div>
         </div>
+      )}
+
+      {/* Snapshot Active Warning Banner */}
+      {snapshotData && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-[40] w-fit max-w-[90%] bg-amber-950/90 backdrop-blur-md border border-amber-500/30 rounded-xl px-4 py-2 flex items-center gap-3 text-xs text-white animate-slide-in-down shadow-2xl">
+          <span className="text-sm">⚠️</span>
+          <div>
+            <strong className="block text-amber-400 font-bold">Chế độ Xem Snapshot</strong>
+            <span className="text-[10px] text-amber-200/80">Đang hiển thị dữ liệu trạng thái từ tệp CSV đã nhập.</span>
+          </div>
+          <button
+            onClick={() => setSnapshotData(null)}
+            className="ml-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2 py-1 rounded text-[10px] transition cursor-pointer"
+          >
+            Khôi phục thực tế
+          </button>
+        </div>
+      )}
+
+      {/* Map Control Buttons Stack (2D/3D, Snapshot, Traffic Lines Toggle) */}
+      {mapInstance && (
+        <>
+          {/* Helper function to get top offsets based on pageContext and hasActiveAlert */}
+          {(() => {
+            const getTopOffset = (baseHome: number, baseOther: number) => {
+              if (pageContext === 'home') {
+                return hasActiveAlert ? `${baseHome + 36}px` : `${baseHome}px`;
+              }
+              return `${baseOther}px`;
+            };
+
+            return (
+              <>
+                {/* 1. 2D/3D Toggle Button */}
+                <button
+                  id="btn-3d-toggle"
+                  onClick={() => setLocalIs3D(!localIs3D)}
+                  style={{ top: getTopOffset(208, 16) }}
+                  className={`absolute left-4 z-30 w-11 h-11 flex items-center justify-center rounded-full backdrop-blur-sm border shadow-lg transition-all duration-300 cursor-pointer ${
+                    localIs3D
+                      ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow-indigo-500/20'
+                      : 'bg-slate-900/80 hover:bg-slate-800/80 border-white/10 text-slate-200 hover:text-white'
+                  }`}
+                  title={localIs3D ? 'Chuyển sang bản đồ 2D' : 'Chuyển sang bản đồ 3D'}
+                >
+                  {localIs3D ? <Layers size={20} /> : <Box size={20} />}
+                </button>
+
+                {/* 2. Snapshot floating menu */}
+                <div
+                  style={{ top: getTopOffset(336, 80) }}
+                  className="absolute left-4 z-30 flex flex-col items-start"
+                >
+                  <button
+                    id="btn-snapshot-menu"
+                    onClick={() => setSnapshotMenuOpen(!snapshotMenuOpen)}
+                    className="w-11 h-11 flex items-center justify-center rounded-full bg-slate-900/80 hover:bg-slate-800/80 text-slate-200 hover:text-white backdrop-blur-sm border border-white/10 shadow-lg transition-all duration-300 cursor-pointer"
+                    title="Quản lý Snapshots"
+                  >
+                    <Camera size={20} />
+                  </button>
+
+                  {snapshotMenuOpen && (
+                    <div className="absolute left-14 top-0 bg-slate-950/95 border border-white/10 rounded-xl shadow-2xl p-2 flex flex-col gap-1 w-48 backdrop-blur-md animate-slide-in-right">
+                      <button
+                        onClick={handleExportPNG}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/5 rounded-lg text-slate-200 hover:text-white transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>🖼️</span> Xuất ảnh bản đồ (PNG)
+                      </button>
+                      <button
+                        onClick={handleExportCSV}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/5 rounded-lg text-slate-200 hover:text-white transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>📤</span> Xuất dữ liệu CSV
+                      </button>
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full text-left px-3 py-2 text-xs font-semibold hover:bg-white/5 rounded-lg text-slate-200 hover:text-white transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>📥</span> Nhập dữ liệu CSV
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImportCSV}
+                        accept=".csv"
+                        className="hidden"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Traffic Lines Toggle Button (New 7th Button) */}
+                <button
+                  id="btn-traffic-toggle"
+                  onClick={() => setLocalHideTraffic(!localHideTraffic)}
+                  style={{ top: getTopOffset(400, 144) }}
+                  className={`absolute left-4 z-30 w-11 h-11 flex items-center justify-center rounded-full backdrop-blur-sm border shadow-lg transition-all duration-300 cursor-pointer ${
+                    localHideTraffic
+                      ? 'bg-amber-600 hover:bg-amber-500 border-amber-500 text-white shadow-amber-500/20'
+                      : 'bg-slate-900/80 hover:bg-slate-800/80 border-white/10 text-slate-200 hover:text-white'
+                  }`}
+                  title={localHideTraffic ? 'Bật chế độ hiển thị làn đường kẹt xe' : 'Tắt chế độ hiển thị làn đường kẹt xe'}
+                >
+                  {localHideTraffic ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </>
+            );
+          })()}
+        </>
       )}
     </div>
   );

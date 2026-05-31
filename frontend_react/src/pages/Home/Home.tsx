@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Menu, X, RotateCcw, AlertTriangle, Thermometer, CloudRain, Shield, RefreshCw, Box, Layers } from 'lucide-react';
+import { Menu, X, RotateCcw, AlertTriangle, Thermometer, CloudRain, Shield, RefreshCw, Box, Layers, MapPin, HelpCircle } from 'lucide-react';
 import TrafficMap from '../../components/map/TrafficMap';
+import { UserTour } from '../../components/map/UserTour';
 import { trafficApi } from '../../api/traffic.api';
 import { historyApi } from '../../api/history.api';
 import { incidentsApi } from '../../api/incidents.api';
@@ -36,9 +37,9 @@ const Home: React.FC = () => {
   const [selectedDistrict, setSelectedDistrict] = useState<number | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isPredictionMode, setIsPredictionMode] = useState(false);
+  const [isTourRun, setIsTourRun] = useState(false);
   const [is3D, setIs3D] = useState(false);
-  const [sliderValue, setSliderValue] = useState(0); // -6 to 1
+  const [sliderValue, setSliderValue] = useState(0); // -6 to 3
 
   // Community jam reporting states
   const [communityModalOpen, setCommunityModalOpen] = useState(false);
@@ -105,10 +106,26 @@ const Home: React.FC = () => {
     enabled: showCommunityReports && isCSGTOrAdmin,
   });
 
-  const { data: predictionData } = useQuery({
-    queryKey: ['predictions'],
-    queryFn: () => trafficApi.getPredict30Min(),
-    enabled: isPredictionMode && sliderValue === 0,
+  // Prediction Queries
+  const { data: prediction10MinData } = useQuery({
+    queryKey: ['predictions-10min'],
+    queryFn: () => historyApi.getPrediction10Min(),
+    enabled: sliderValue === 1,
+    staleTime: 60000,
+  });
+
+  const { data: prediction20MinData } = useQuery({
+    queryKey: ['predictions-20min'],
+    queryFn: () => historyApi.getPrediction20Min(),
+    enabled: sliderValue === 2,
+    staleTime: 60000,
+  });
+
+  const { data: prediction30MinData } = useQuery({
+    queryKey: ['predictions-30min'],
+    queryFn: () => historyApi.getPrediction30Min(),
+    enabled: sliderValue === 3,
+    staleTime: 60000,
   });
 
   // Query for 6-hour historical traffic data
@@ -124,14 +141,6 @@ const Home: React.FC = () => {
     queryKey: ['active-alert'],
     queryFn: () => emergencyApi.getActiveAlert(),
     refetchInterval: 30000,
-  });
-
-  // Query for 5min future prediction
-  const { data: prediction5MinData } = useQuery({
-    queryKey: ['predictions-5min'],
-    queryFn: () => historyApi.getPrediction5Min(),
-    enabled: sliderValue === 1,
-    staleTime: 60000,
   });
 
   const { data: activeIncidents } = useQuery({
@@ -403,12 +412,32 @@ const Home: React.FC = () => {
   }, [refetchTrafficState, sliderValue]);
 
   // Calculate live stats
-  const totalStreets = (sliderValue === 1 ? prediction5MinData?.length : (sliderValue < 0 ? historyTrafficState?.total : trafficState?.total)) ?? 0;
-  const redCount = (sliderValue === 1 ? prediction5MinData?.filter((p) => p.predicted_level === 2).length : ((sliderValue < 0 ? historyTrafficState : trafficState)?.streets?.filter((s) => s.congestion_level === 2).length)) ?? 0;
-  const yellowCount = (sliderValue === 1 ? prediction5MinData?.filter((p) => p.predicted_level === 1).length : ((sliderValue < 0 ? historyTrafficState : trafficState)?.streets?.filter((s) => s.congestion_level === 1).length)) ?? 0;
+  const totalStreets = (() => {
+    if (sliderValue === 1) return prediction10MinData?.length ?? 0;
+    if (sliderValue === 2) return prediction20MinData?.length ?? 0;
+    if (sliderValue === 3) return prediction30MinData?.length ?? 0;
+    if (sliderValue < 0) return historyTrafficState?.total ?? 0;
+    return trafficState?.total ?? 0;
+  })();
+
+  const redCount = (() => {
+    if (sliderValue === 1) return prediction10MinData?.filter((p) => p.predicted_level === 2).length ?? 0;
+    if (sliderValue === 2) return prediction20MinData?.filter((p) => p.predicted_level === 2).length ?? 0;
+    if (sliderValue === 3) return prediction30MinData?.filter((p) => p.predicted_level === 2).length ?? 0;
+    if (sliderValue < 0) return historyTrafficState?.streets?.filter((s) => s.congestion_level === 2).length ?? 0;
+    return trafficState?.streets?.filter((s) => s.congestion_level === 2).length ?? 0;
+  })();
+
+  const yellowCount = (() => {
+    if (sliderValue === 1) return prediction10MinData?.filter((p) => p.predicted_level === 1).length ?? 0;
+    if (sliderValue === 2) return prediction20MinData?.filter((p) => p.predicted_level === 1).length ?? 0;
+    if (sliderValue === 3) return prediction30MinData?.filter((p) => p.predicted_level === 1).length ?? 0;
+    if (sliderValue < 0) return historyTrafficState?.streets?.filter((s) => s.congestion_level === 1).length ?? 0;
+    return trafficState?.streets?.filter((s) => s.congestion_level === 1).length ?? 0;
+  })();
 
   const avgSpeed = (() => {
-    if (sliderValue === 1) return 0;
+    if (sliderValue > 0) return 0;
     const targetState = sliderValue < 0 ? historyTrafficState : trafficState;
     if (!targetState?.streets || targetState.streets.length === 0) return 0;
     const validStreets = targetState.streets.filter(s => s.avg_speed > 0);
@@ -431,19 +460,24 @@ const Home: React.FC = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {/* 1. Map container (fills screen) */}
-      <div className="absolute inset-0 z-0">
+      <div id="map-container" className="absolute inset-0 z-0">
         <TrafficMap
           districtId={selectedDistrict}
           congestionLevel={selectedLevel}
           searchQuery={searchQuery}
-          isPredictionMode={sliderValue === 1 ? true : (sliderValue === 0 ? isPredictionMode : false)}
-          predictionData={sliderValue === 1 ? prediction5MinData : (sliderValue === 0 ? predictionData : null)}
+          isPredictionMode={sliderValue > 0}
+          predictionData={
+            sliderValue === 1 ? prediction10MinData :
+            sliderValue === 2 ? prediction20MinData :
+            sliderValue === 3 ? prediction30MinData : null
+          }
           isReportMode={isReportMode}
           onReportClick={handleReportClick}
           is3D={is3D}
           trafficState={sliderValue < 0 ? historyTrafficState : null}
           communityReports={communityReports}
           showCommunityReports={showCommunityReports}
+          hasActiveAlert={hasActiveAlert}
         />
       </div>
 
@@ -534,25 +568,6 @@ const Home: React.FC = () => {
             />
           </div>
 
-          {/* Prediction Toggle */}
-          <div className="border-t border-white/10 pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="block text-sm font-semibold text-slate-200">Dự báo kẹt xe (30 phút)</span>
-                <span className="text-xs text-slate-400">Sử dụng AI dự đoán luồng</span>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={isPredictionMode}
-                  onChange={(e) => setIsPredictionMode(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
-              </label>
-            </div>
-          </div>
-
           {/* Community Reports Layer Toggle (S5-55b) */}
           {isCSGTOrAdmin && (
             <div className="border-t border-white/10 pt-4">
@@ -589,8 +604,9 @@ const Home: React.FC = () => {
 
       {/* 3. Floating Filter Menu Toggle Button */}
       <button
+        id="btn-filter-toggle"
         onClick={() => setIsFilterOpen(!isFilterOpen)}
-        className={`absolute ${hasActiveAlert ? 'top-[116px]' : 'top-20'} left-4 z-30 bg-slate-900/80 hover:bg-slate-800/80 backdrop-blur-sm border border-white/10 shadow-lg rounded-full p-3 text-slate-200 transition-all duration-300 cursor-pointer`}
+        className={`absolute ${hasActiveAlert ? 'top-[116px]' : 'top-[80px]'} left-4 z-30 w-11 h-11 flex items-center justify-center rounded-full bg-slate-900/80 hover:bg-slate-800/80 backdrop-blur-sm border border-white/10 shadow-lg text-slate-200 hover:text-white transition-all duration-300 cursor-pointer`}
         title="Bộ lọc bản đồ"
       >
         <Menu size={20} />
@@ -598,41 +614,32 @@ const Home: React.FC = () => {
 
       {/* Citizen Report Mode Toggle Button */}
       <button
+        id="btn-report-toggle"
         onClick={() => {
           setIsReportMode(!isReportMode);
           if (isFilterOpen) setIsFilterOpen(false);
         }}
-        className={`absolute ${hasActiveAlert ? 'top-[180px]' : 'top-36'} left-4 z-30 backdrop-blur-sm border shadow-lg rounded-full p-3 transition-all duration-300 cursor-pointer ${
+        className={`absolute ${hasActiveAlert ? 'top-[180px]' : 'top-[144px]'} left-4 z-30 w-11 h-11 flex items-center justify-center rounded-full backdrop-blur-sm border shadow-lg transition-all duration-300 cursor-pointer ${
           isReportMode
             ? 'bg-red-600 hover:bg-red-500 border-red-500 text-white animate-pulse'
-            : 'bg-slate-900/80 hover:bg-slate-800/80 border-white/10 text-slate-200'
+            : 'bg-slate-900/80 hover:bg-slate-800/80 border-white/10 text-slate-200 hover:text-white'
         }`}
         title={isReportMode ? 'Tắt chế độ báo cáo kẹt xe' : 'Bật chế độ báo cáo kẹt xe'}
       >
         <AlertTriangle size={20} />
       </button>
 
-      {/* 2D/3D Toggle Button */}
-      <button
-        onClick={() => setIs3D(!is3D)}
-        className={`absolute ${hasActiveAlert ? 'top-[244px]' : 'top-52'} left-4 z-30 backdrop-blur-sm border shadow-lg rounded-full p-3 transition-all duration-300 cursor-pointer ${
-          is3D
-            ? 'bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white shadow-indigo-500/20'
-            : 'bg-slate-900/80 hover:bg-slate-800/80 border-white/10 text-slate-200'
-        }`}
-        title={is3D ? 'Chuyển sang bản đồ 2D' : 'Chuyển sang bản đồ 3D'}
-      >
-        {is3D ? <Layers size={20} /> : <Box size={20} />}
-      </button>
+      {/* 2D/3D Toggle Button has been refactored into TrafficMap component */}
 
       {/* Community Jam Report floating button (S5-53b) */}
       <button
+        id="btn-report-current"
         onClick={handleReportAtCurrentLocation}
         style={{ top: hasActiveAlert ? '308px' : '272px' }}
-        className="absolute left-4 z-30 bg-slate-900/80 hover:bg-slate-800/80 text-slate-200 backdrop-blur-sm border border-white/10 shadow-lg rounded-full p-3 transition-all duration-300 cursor-pointer flex items-center justify-center"
+        className="absolute left-4 z-30 w-11 h-11 flex items-center justify-center rounded-full bg-slate-900/80 hover:bg-slate-800/80 text-slate-200 hover:text-white backdrop-blur-sm border border-white/10 shadow-lg transition-all duration-300 cursor-pointer"
         title="Báo cáo kẹt xe tại vị trí hiện tại"
       >
-        <span className="text-lg">📍</span>
+        <MapPin size={20} />
       </button>
 
       {/* Report Mode Top Banner Overlay */}
@@ -801,7 +808,9 @@ const Home: React.FC = () => {
           <div className="bg-slate-950/80 backdrop-blur-md shadow-2xl border border-white/10 rounded-xl px-4 py-2.5 flex items-center gap-3">
             <span className="text-xl">🚗</span>
             <div>
-              <span className="block font-bold text-white text-sm">{avgSpeed} km/h</span>
+              <span className="block font-bold text-white text-sm">
+                {sliderValue > 0 ? 'N/A' : `${avgSpeed} km/h`}
+              </span>
               <span className="block text-[10px] text-slate-400 font-medium">Tốc độ TB TP</span>
             </div>
           </div>
@@ -857,10 +866,10 @@ const Home: React.FC = () => {
               Làm mới ngay
             </button>
           </>
-        ) : sliderValue === 1 ? (
+        ) : sliderValue > 0 ? (
           <>
             <Shield size={14} className="text-purple-400 animate-pulse" />
-            <span className="text-purple-400 font-bold">Chế độ dự báo AI tương lai (+5 phút)</span>
+            <span className="text-purple-400 font-bold">Chế độ dự báo AI tương lai (+{sliderValue * 10} phút)</span>
             <button
               onClick={() => setSliderValue(0)}
               className="hover:text-slate-200 text-slate-400 transition font-bold cursor-pointer underline ml-1"
@@ -883,22 +892,22 @@ const Home: React.FC = () => {
       </div>
 
       {/* 6. Time Slider Widget (Bottom Center, 40% Width) */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[40%] min-w-[340px] max-w-lg z-30 bg-slate-950/90 backdrop-blur-md border border-white/10 shadow-2xl rounded-2xl px-5 py-3 flex flex-col gap-2">
+      <div id="btn-timeline-slider" className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[40%] min-w-[340px] max-w-lg z-30 bg-slate-950/90 backdrop-blur-md border border-white/10 shadow-2xl rounded-2xl px-5 py-3 flex flex-col gap-2">
         <div className="flex items-center justify-between text-xs font-bold">
           <span className="text-slate-400">Trục thời gian</span>
           <span className={`px-2.5 py-0.5 rounded-full text-[10px] ${
             sliderValue === 0
               ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-              : sliderValue === 1
+              : sliderValue > 0
                 ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30 animate-pulse'
                 : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
           }`}>
             {sliderValue === 0
               ? '● Hiện tại (Thời gian thực)'
-              : sliderValue === 1
-                ? '🔮 Dự đoán (+5 phút)'
+              : sliderValue > 0
+                ? `🔮 Dự đoán (+${sliderValue * 10} phút)`
                 : `⏱ Lịch sử (${Math.abs(sliderValue)} giờ trước)`
-            }
+          }
           </span>
         </div>
 
@@ -906,7 +915,7 @@ const Home: React.FC = () => {
           <input
             type="range"
             min="-6"
-            max="1"
+            max="3"
             step="1"
             value={sliderValue}
             onChange={(e) => setSliderValue(parseInt(e.target.value))}
@@ -920,20 +929,12 @@ const Home: React.FC = () => {
             <span>-2h</span>
             <span>-1h</span>
             <span className={sliderValue === 0 ? 'text-green-400 font-bold' : ''}>Hiện tại</span>
-            <span className={sliderValue === 1 ? 'text-purple-400 font-bold' : ''}>+5p</span>
+            <span className={sliderValue === 1 ? 'text-purple-400 font-bold' : ''}>+10p</span>
+            <span className={sliderValue === 2 ? 'text-purple-400 font-bold' : ''}>+20p</span>
+            <span className={sliderValue === 3 ? 'text-purple-400 font-bold' : ''}>+30p</span>
           </div>
         </div>
       </div>
-
-      {/* Prediction indicator */}
-      {(sliderValue === 1 || (isPredictionMode && sliderValue === 0)) && (
-        <div className={`absolute bottom-4 right-4 z-30 text-white shadow-lg rounded-lg px-4 py-2 flex items-center gap-2 text-xs font-bold animate-pulse ${
-          sliderValue === 1 ? 'bg-purple-600' : 'bg-blue-600'
-        }`}>
-          <Shield size={14} />
-          <span>{sliderValue === 1 ? 'DỰ BÁO AI (+5 PHÚT)' : 'DỰ BÁO AI (+30 PHÚT)'}</span>
-        </div>
-      )}
 
       {/* Community Jam Report Modal (S5-53b) */}
       {communityModalOpen && commLat !== null && commLng !== null && (
@@ -1018,21 +1019,37 @@ const Home: React.FC = () => {
         </div>
       )}
 
+      {/* Help Tour button */}
+      <button
+        id="btn-help-tour"
+        onClick={() => setIsTourRun(true)}
+        style={{ top: hasActiveAlert ? '500px' : '464px' }}
+        className="absolute left-4 z-30 w-11 h-11 flex items-center justify-center rounded-full bg-slate-900/80 hover:bg-slate-800/80 text-slate-200 hover:text-white backdrop-blur-sm border border-white/10 shadow-lg transition-all duration-300 cursor-pointer"
+        title="Hướng dẫn sử dụng"
+      >
+        <HelpCircle size={20} />
+      </button>
+
       {/* Proximity Alert Toast (S5-56) */}
       {proximityAlerts.length > 0 && (
-        <div className="fixed bottom-6 right-[72px] z-50 max-w-[280px] sm:max-w-xs bg-slate-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl p-3 text-white">
+        <div className="fixed bottom-6 right-[72px] z-50 max-w-[280px] sm:max-w-xs bg-slate-900/95 backdrop-blur-md border border-red-500/30 rounded-2xl shadow-2xl p-3 text-white animate-slide-in-up shadow-red-950/20">
           <div className="flex items-start space-x-2">
             <span className="text-xl">🚨</span>
             <div className="flex-1">
               <h5 className="font-bold text-sm text-red-400 flex items-center gap-1">
                 Cảnh báo ùn tắc gần bạn
               </h5>
-              <div className="mt-1.5 space-y-1.5 max-h-28 overflow-y-auto pr-1">
-                {proximityAlerts.slice(0, 3).map((alert, idx) => (
-                  <p key={idx} className="text-xs text-slate-300">
-                    Đường <strong className="text-white">{alert.streetName}</strong> đang kẹt xe cách bạn <strong className="text-amber-400">{alert.distance.toFixed(1)} km</strong>.
-                  </p>
-                ))}
+              <div className="mt-1.5 space-y-1.5 max-h-28 overflow-y-auto pr-1 custom-scrollbar">
+                {proximityAlerts.slice(0, 3).map((alert, idx) => {
+                  const streetLabel = alert.streetName.toLowerCase().startsWith('đường')
+                    ? alert.streetName
+                    : `Đường ${alert.streetName}`;
+                  return (
+                    <p key={idx} className="text-xs text-slate-300">
+                      <strong className="text-white">{streetLabel}</strong> đang kẹt xe cách bạn <strong className="text-amber-400">{alert.distance.toFixed(1)} km</strong>.
+                    </p>
+                  );
+                })}
                 {proximityAlerts.length > 3 && (
                   <p className="text-[10px] text-slate-400">Và {proximityAlerts.length - 3} điểm kẹt xe khác.</p>
                 )}
@@ -1075,6 +1092,11 @@ const Home: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Interactive User Tour (react-joyride) */}
+      {isTourRun && (
+        <UserTour run={isTourRun} onFinish={() => setIsTourRun(false)} isCSGTOrAdmin={isCSGTOrAdmin} />
       )}
     </div>
   );

@@ -47,4 +47,42 @@ export const schedulerApi = {
     const response = await api.get(`/api/traffic/crawl/logs?limit=${limit}`);
     return response.data;
   },
+  getCrawlStats: async (): Promise<CrawlStatsResponse> => {
+    const response = await api.get<CrawlStatsResponse>('/api/traffic/crawl/stats');
+    return response.data;
+  },
 };
+
+export interface CrawlKPIs {
+  total_runs: number;
+  success_runs: number;
+  failed_runs: number;
+  missed_runs: number;
+  success_rate: number;
+  avg_duration: number;
+}
+
+export interface DetailedRun {
+  timestamp: string;
+  date: string;
+  status: string;
+  success_count: number;
+  total_count: number;
+  duration: number;
+  missed_before: number;
+}
+
+export interface DailyStat {
+  date: string;
+  success: number;
+  failed: number;
+  missed: number;
+}
+
+export interface CrawlStatsResponse {
+  success: boolean;
+  message?: string;
+  kpis: CrawlKPIs;
+  last_runs: DetailedRun[];
+  daily_stats: DailyStat[];
+}

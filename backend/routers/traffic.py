@@ -1413,3 +1413,160 @@ def get_crawler_logs(
             status_code=500,
             detail=f"Lỗi khi đọc file log: {str(e)}"
         )
+
+
+@router.get(
+    "/traffic/crawl/stats",
+    summary="Phân tích logs cào dữ liệu để xuất thống kê đồ thị",
+    description="Đọc toàn bộ logs/crawler.log để thống kê KPIs, tỷ lệ thành công, số lượng cào và số lượng bị lỡ.",
+)
+def get_crawl_stats(
+    current_user: User = Depends(require_admin),
+):
+    import os
+    import re
+    from datetime import datetime, timedelta
+
+    log_path = "logs/crawler.log"
+    if not os.path.exists(log_path):
+        return {
+            "success": False,
+            "message": "Chưa có file log crawler.log",
+            "kpis": {
+                "total_runs": 0,
+                "success_runs": 0,
+                "failed_runs": 0,
+                "missed_runs": 0,
+                "success_rate": 100.0,
+                "avg_duration": 0.0,
+            },
+            "last_runs": [],
+            "daily_stats": [],
+        }
+
+    success_pattern = re.compile(
+        r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \+07 \[INFO\] ✅ Hoàn tất HERE Bbox Crawl: (\d+)/(\d+) segments map được — ([\d.]+)s"
+    )
+    error_pattern = re.compile(
+        r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \+07 \[(?:ERROR|WARNING)\] (?:Lỗi cào dữ liệu HERE API: |Lỗi cào |Thất bại |⛔ \[TOMTOM\] HẾT QUOTA |⛔ \[GOONG\] HẾT QUOTA )(.*)"
+    )
+
+    runs = []
+
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                m_success = success_pattern.match(line)
+                if m_success:
+                    dt_str, succ_str, tot_str, dur_str = m_success.groups()
+                    runs.append({
+                        "dt": datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S"),
+                        "status": "success",
+                        "success_count": int(succ_str),
+                        "total_count": int(tot_str),
+                        "duration": float(dur_str),
+                    })
+                    continue
+
+                m_error = error_pattern.match(line)
+                if m_error:
+                    dt_str, err_msg = m_error.groups()
+                    runs.append({
+                        "dt": datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S"),
+                        "status": "failed",
+                        "success_count": 0,
+                        "total_count": 0,
+                        "duration": 0.0,
+                    })
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi khi đọc file log: {str(e)}"
+        )
+
+    if not runs:
+        return {
+            "success": True,
+            "kpis": {
+                "total_runs": 0,
+                "success_runs": 0,
+                "failed_runs": 0,
+                "missed_runs": 0,
+                "success_rate": 100.0,
+                "avg_duration": 0.0,
+            },
+            "last_runs": [],
+            "daily_stats": [],
+        }
+
+    # Sort runs chronologically
+    runs.sort(key=lambda x: x["dt"])
+
+    # Calculate missed runs and build detailed run list
+    detailed_runs = []
+    total_missed = 0
+
+    # Track daily counts
+    daily_data = {}  # date_str -> {success, failed, missed}
+
+    for i, run in enumerate(runs):
+        missed = 0
+        if i > 0:
+            prev_run = runs[i-1]
+            diff = (run["dt"] - prev_run["dt"]).total_seconds()
+            if diff > 330:
+                missed = int(diff / 300) - 1
+                total_missed += max(0, missed)
+
+        day_str = run["dt"].strftime("%Y-%m-%d")
+        if day_str not in daily_data:
+            daily_data[day_str] = {"success": 0, "failed": 0, "missed": 0}
+
+        if run["status"] == "success":
+            daily_data[day_str]["success"] += 1
+        else:
+            daily_data[day_str]["failed"] += 1
+        daily_data[day_str]["missed"] += max(0, missed)
+
+        detailed_runs.append({
+            "timestamp": run["dt"].strftime("%H:%M %d/%m"),
+            "date": day_str,
+            "status": run["status"],
+            "success_count": run["success_count"],
+            "total_count": run["total_count"],
+            "duration": run["duration"],
+            "missed_before": max(0, missed),
+        })
+
+    success_runs = sum(1 for r in runs if r["status"] == "success")
+    failed_runs = sum(1 for r in runs if r["status"] == "failed")
+    total_attempts = success_runs + failed_runs
+    success_rate = (success_runs / total_attempts * 100) if total_attempts > 0 else 100.0
+
+    durations = [r["duration"] for r in runs if r["status"] == "success" and r["duration"] > 0]
+    avg_duration = sum(durations) / len(durations) if durations else 0.0
+
+    # Format daily stats for charts
+    daily_stats = []
+    for day in sorted(daily_data.keys()):
+        daily_stats.append({
+            "date": datetime.strptime(day, "%Y-%m-%d").strftime("%d/%m"),
+            "success": daily_data[day]["success"],
+            "failed": daily_data[day]["failed"],
+            "missed": daily_data[day]["missed"],
+        })
+
+    return {
+        "success": True,
+        "kpis": {
+            "total_runs": total_attempts,
+            "success_runs": success_runs,
+            "failed_runs": failed_runs,
+            "missed_runs": total_missed,
+            "success_rate": round(success_rate, 1),
+            "avg_duration": round(avg_duration, 2),
+        },
+        "last_runs": detailed_runs[-50:],  # last 50 runs for charts
+        "daily_stats": daily_stats[-7:],   # last 7 days for bar charts
+    }

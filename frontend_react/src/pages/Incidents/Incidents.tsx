@@ -547,7 +547,7 @@ const Incidents: React.FC = () => {
                 </div>
                 {/* Suggestions list */}
                 {streetSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 mt-1 bg-slate-950 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-40 overflow-y-auto">
+                  <div className="absolute left-0 right-0 mt-1 bg-slate-950 border border-white/10 rounded-lg shadow-2xl z-[200] max-h-40 overflow-y-auto custom-scrollbar">
                     {streetSuggestions.map((st) => (
                       <button
                         key={`modal-street-${st.street_id}`}
