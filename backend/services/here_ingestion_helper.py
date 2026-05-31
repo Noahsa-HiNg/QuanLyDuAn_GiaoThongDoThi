@@ -212,7 +212,7 @@ def run_here_crawl(db: Session, started_at: datetime):
 
     # Lấy tọa độ centroid các đường từ DB
     osm_query = db.execute(text("""
-        SELECT id, ST_Y(ST_Centroid(geometry)) as lat, ST_X(ST_Centroid(geometry)) as lon, max_speed
+        SELECT id, name, ST_Y(ST_Centroid(geometry)) as lat, ST_X(ST_Centroid(geometry)) as lon, max_speed
         FROM streets WHERE geometry IS NOT NULL
     """)).fetchall()
 
@@ -238,6 +238,8 @@ def run_here_crawl(db: Session, started_at: datetime):
     success_cnt = 0
     now = datetime.now(TZ_DANANG)
 
+    temp_records = []
+
     for i, row in enumerate(osm_query):
         dist = distances[i]
         if dist < 0.005:  # ~500m
@@ -247,48 +249,92 @@ def run_here_crawl(db: Session, started_at: datetime):
             jam_factor = hs.get("jam_factor", 0.0)
             confidence = hs.get("confidence", 1.0)
 
-            # ── Tự động cập nhật max_speed từ freeflow HERE ────────────────
-            # Chỉ cập nhật nếu freeflow hợp lệ (15–120 km/h)
-            # và chênh lệch đáng kể so với max_speed hiện tại (> 15 km/h)
-            if freeflow and 15 <= freeflow <= 120:
-                # Chuẩn hóa về bội số gần nhất của 10
-                normalized = _normalize_speed(freeflow)
-                current_max = row.max_speed or 0
-                if current_max == 0 or abs(current_max - normalized) > 15:
-                    streets_to_update_speed.append((row.id, normalized))
-
-            # ── Ghi đè vận tốc đối với đường bị đóng (Roadblock) ─────────────────
-            if row.id in roadblocks:
-                speed = 0.0
-                cong = 2
-            # ── Ghi đè vận tốc đối với đường bị kẹt do sự kiện / tai nạn ──────────
-            elif (row.id in events or jam_factor >= 8.0) and (speed >= 25.0 and confidence < 0.5):
-                # Bị ùn tắc/chặn do sự kiện nhưng HERE trả về vận tốc cao ảo do fallback dữ liệu cũ
-                # -> Cưỡng bức tốc độ về mức bò 5 km/h và gán mức đỏ (2)
+            # ── Đánh giá ghi đè ban đầu ──
+            is_roadblock = row.id in roadblocks
+            is_event_override = False
+            if (row.id in events or jam_factor >= 8.0) and (speed >= 25.0 and confidence < 0.5):
+                is_event_override = True
                 speed = 5.0
-                cong = 2
-            else:
-                # Phân cấp tắc đường dùng jamFactor của HERE (0.0 -> 10.0)
-                #   jam_factor < 4.0        -> 0 (Xanh - thông thoáng)
-                #   4.0 <= jam_factor < 8.0 -> 1 (Vàng - ùn ứ)
-                #   jam_factor >= 8.0       -> 2 (Đỏ - kẹt xe)
-                if jam_factor >= 8.0:
-                    cong = 2
-                elif jam_factor >= 4.0:
-                    cong = 1
-                else:
-                    cong = 0
 
-            records_to_insert.append(TrafficData(
-                street_id=row.id,
-                segment_idx=0,
-                timestamp=now,
-                avg_speed=speed,
-                free_flow_speed=freeflow,
-                congestion_level=cong,
-                source="here_bbox"
-            ))
-            success_cnt += 1
+            temp_records.append({
+                "street_id": row.id,
+                "name": row.name,
+                "speed": speed,
+                "freeflow": freeflow,
+                "jam_factor": jam_factor,
+                "confidence": confidence,
+                "is_roadblock": is_roadblock,
+                "is_event_override": is_event_override,
+                "max_speed": row.max_speed
+            })
+
+    # ── Đồng nhất trạng thái cho các phân đoạn trên cùng một cây cầu ──
+    bridge_groups = {}
+    for tr in temp_records:
+        name = tr["name"]
+        if name and ("cầu" in name.lower() or "bridge" in name.lower()):
+            if name not in bridge_groups:
+                bridge_groups[name] = []
+            bridge_groups[name].append(tr)
+
+    for name, group in bridge_groups.items():
+        if len(group) > 1:
+            avg_speed = sum(g["speed"] for g in group) / len(group)
+            valid_ffs = [g["freeflow"] for g in group if g["freeflow"] is not None]
+            avg_ff = sum(valid_ffs) / len(valid_ffs) if valid_ffs else None
+            avg_jam = sum(g["jam_factor"] for g in group) / len(group)
+            
+            # Đồng nhất các cờ sự cố đóng đường và tai nạn cho toàn bộ cầu
+            any_roadblock = any(g["is_roadblock"] for g in group)
+            any_event = any(g["is_event_override"] for g in group)
+
+            for g in group:
+                g["speed"] = avg_speed
+                g["freeflow"] = avg_ff
+                g["jam_factor"] = avg_jam
+                g["is_roadblock"] = any_roadblock
+                g["is_event_override"] = any_event
+
+    # ── Xây dựng danh sách TrafficData để lưu trữ ──
+    for tr in temp_records:
+        speed = tr["speed"]
+        freeflow = tr["freeflow"]
+        jam_factor = tr["jam_factor"]
+        is_roadblock = tr["is_roadblock"]
+        is_event_override = tr["is_event_override"]
+
+        # Tự động cập nhật max_speed từ freeflow HERE
+        if freeflow and 15 <= freeflow <= 120:
+            normalized = _normalize_speed(freeflow)
+            current_max = tr["max_speed"] or 0
+            if current_max == 0 or abs(current_max - normalized) > 15:
+                streets_to_update_speed.append((tr["street_id"], normalized))
+
+        # Tính lại congestion_level dựa trên các giá trị đã được đồng nhất
+        if is_roadblock:
+            speed = 0.0
+            cong = 2
+        elif is_event_override:
+            speed = 5.0
+            cong = 2
+        else:
+            if jam_factor >= 8.0:
+                cong = 2
+            elif jam_factor >= 2.0:
+                cong = 1
+            else:
+                cong = 0
+
+        records_to_insert.append(TrafficData(
+            street_id=tr["street_id"],
+            segment_idx=0,
+            timestamp=now,
+            avg_speed=speed,
+            free_flow_speed=freeflow,
+            congestion_level=cong,
+            source="here_bbox"
+        ))
+        success_cnt += 1
 
     # ── Cập nhật max_speed hàng loạt cho các đường cần điều chỉnh ─────────
     if streets_to_update_speed:

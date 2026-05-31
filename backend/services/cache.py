@@ -79,7 +79,8 @@ def invalidate_traffic() -> None:
     Gọi sau khi cào xong dữ liệu mới → buộc lần gọi tiếp theo đọc lại từ DB.
     """
     redis_client.delete(CACHE_KEY_TRAFFIC)
-    log.info(f"🗑  Cache INVALIDATED: {CACHE_KEY_TRAFFIC}")
+    redis_client.delete("traffic:state")
+    log.info(f"🗑  Cache INVALIDATED: {CACHE_KEY_TRAFFIC} and traffic:state")
 
 
 # ─── 2. CACHE TRAFFIC 1 TUYẾN ĐƯỜNG ─────────────────────────────────────────

@@ -14,7 +14,7 @@ Dùng làm feature đầu vào cho AI model:
 
 from sqlalchemy import (
 
-    Column, Integer, String, Boolean, Text,
+    Column, Integer, String, Boolean, Text, Float,
     ForeignKey, Index, CheckConstraint, TIMESTAMP, UniqueConstraint
 
 )
