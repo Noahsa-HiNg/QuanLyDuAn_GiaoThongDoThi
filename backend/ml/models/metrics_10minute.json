@@ -1,0 +1,45 @@
+{
+  "best_model": "CatBoost",
+  "trained_at": "2026-05-31T10:04:43.214033+00:00",
+  "features": [
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "is_rush_hour",
+    "current_speed",
+    "free_flow_speed",
+    "speed_ratio",
+    "speed_delta",
+    "rolling_speed_3",
+    "road_length",
+    "max_speed",
+    "district_id",
+    "avg_speed_1h_ago",
+    "avg_speed_yesterday",
+    "has_incident",
+    "incident_severity"
+  ],
+  "results": [
+    {
+      "model": "CatBoost",
+      "accuracy": 0.8598483942185342,
+      "precision": 0.8606226643839731,
+      "recall": 0.8598483942185342,
+      "f1": 0.8599312344530612
+    },
+    {
+      "model": "XGBoost",
+      "accuracy": 0.8584574057357883,
+      "precision": 0.8594367159803371,
+      "recall": 0.8584574057357883,
+      "f1": 0.8587018619526514
+    },
+    {
+      "model": "LightGBM",
+      "accuracy": 0.8546846621496699,
+      "precision": 0.8581061360667666,
+      "recall": 0.8546846621496699,
+      "f1": 0.8561836363916754
+    }
+  ]
+}

@@ -66,6 +66,7 @@ backend/ml/models/*.h5
 backend/ml/models/*.pt
 backend/ml/models/*.pth
 backend/ml/models/*.onnx
+backend/catboost_info/
 
 # Giữ lại file metrics và thư mục (để cấu trúc không bị mất)
 !backend/ml/models/.gitkeep

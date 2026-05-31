@@ -26,8 +26,13 @@ logger = logging.getLogger(__name__)
 
 MODEL_DIR = "ml/models"
 
-BEST_MODEL_PATH = os.path.join(MODEL_DIR, "best_model.pkl")
-METRICS_PATH = os.path.join(MODEL_DIR, "metrics.json")
+BEST_MODEL_PATH_10minute = os.path.join(MODEL_DIR, "best_model_10minute.pkl")
+BEST_MODEL_PATH_20minute = os.path.join(MODEL_DIR, "best_model_20minute.pkl")
+BEST_MODEL_PATH_30minute = os.path.join(MODEL_DIR, "best_model_30minute.pkl")
+
+METRICS_PATH_10minute = os.path.join(MODEL_DIR, "metrics_10minute.json")
+METRICS_PATH_20minute = os.path.join(MODEL_DIR, "metrics_20minute.json")
+METRICS_PATH_30minute = os.path.join(MODEL_DIR, "metrics_30minute.json")
 
 
 # =========================
@@ -83,8 +88,8 @@ def build_models(num_classes):
 # =========================
 # DATA LOADING
 # =========================
-def show_sample():
-    df = build_dataset(n_days=None, roads_limit=None)
+def show_sample(predict_steps: int = 2):
+    df = build_dataset(n_days=None, roads_limit=None , predict_steps= predict_steps)
 
     if df is None or len(df) < 100:
         logger.error("Không đủ dữ liệu")
@@ -111,8 +116,8 @@ def show_sample():
 # =========================
 # TRAIN
 # =========================
-def train():
-    data = show_sample()
+def train(path_best_model,path_metrics, predict_steps: int = 2):
+    data = show_sample(predict_steps = predict_steps)
     if data is None:
         return
 
@@ -170,7 +175,7 @@ def train():
         logger.error("Không model nào train thành công")
         return
 
-    joblib.dump(best_model, BEST_MODEL_PATH)
+    joblib.dump(best_model, path_best_model)
 
     metrics_out = {
         "best_model": best_model_name,
@@ -179,20 +184,24 @@ def train():
         "results": results_df.to_dict(orient="records")
     }
 
-    with open(METRICS_PATH, "w", encoding="utf-8") as f:
+    with open(path_metrics, "w", encoding="utf-8") as f:
         json.dump(metrics_out, f, indent=2, ensure_ascii=False)
 
     logger.info("=" * 60)
     logger.info("BEST MODEL = %s", best_model_name)
     logger.info("BEST F1 = %.4f", best_f1)
-    logger.info("Saved model -> %s", BEST_MODEL_PATH)
-    logger.info("Saved metrics -> %s", METRICS_PATH)
+    logger.info("Saved model -> %s", path_best_model)
+    logger.info("Saved metrics -> %s", path_metrics)
 
-
+def train_all():
+    # Train 3 models cho 3 khung thời gian dự đoán khác nhau
+    train(BEST_MODEL_PATH_10minute, METRICS_PATH_10minute, predict_steps = 2)
+    train(BEST_MODEL_PATH_20minute, METRICS_PATH_20minute, predict_steps = 4)
+    train(BEST_MODEL_PATH_30minute, METRICS_PATH_30minute, predict_steps = 6)
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
 
-    train()
+    train_all()

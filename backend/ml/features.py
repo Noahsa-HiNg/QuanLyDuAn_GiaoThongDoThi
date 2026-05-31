@@ -11,7 +11,6 @@ DEFAULT_MAX_SPEED = 40
 DEFAULT_ROAD_LENGTH = 100.0
 
 # predict sau 1 giờ nếu mỗi record cách nhau 5 phút
-PREDICT_STEPS = 12
 
 # __ create lable ------------------------------
 def create_labels(df: pd.DataFrame,predict_steps: int = 12) -> pd.DataFrame:
@@ -65,8 +64,68 @@ def fill_free_flow_speed(df):
     )
 
     return df
+# ── MERGE INCIDENTS ───────────────────────────────────────────────────────────
+def merge_incidents(traffic_df: pd.DataFrame, incidents_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Với mỗi record traffic, kiểm tra xem tại thời điểm timestamp đó
+    có incident nào đang xảy ra trên cùng street_id không.
+ 
+    - has_incident  : 1 nếu có, 0 nếu không
+    - incident_severity : severity cao nhất trong khoảng thời gian đó (0 nếu không có)
+    """
+    # Khởi tạo mặc định
+    traffic_df["has_incident"] = 0
+    traffic_df["incident_severity"] = 0
+ 
+    if incidents_df.empty:
+        logger.info("⚠️ Không có incident nào — giữ nguyên has_incident=0")
+        return traffic_df
+ 
+    # Đảm bảo kiểu datetime, bỏ timezone để so sánh đồng nhất
+    incidents_df = incidents_df.copy()
+    incidents_df["start_time"] = pd.to_datetime(incidents_df["start_time"], utc=True)
+    incidents_df["end_time"]   = pd.to_datetime(incidents_df["end_time"],   utc=True)
+ 
+    traffic_df = traffic_df.copy()
+    traffic_df["timestamp"] = pd.to_datetime(traffic_df["timestamp"], utc=True)
+ 
+    # Group incidents theo street_id để giảm vòng lặp
+    inc_grouped = incidents_df.groupby("street_id")
+ 
+    has_incident_list     = []
+    incident_severity_list = []
+ 
+    for _, row in traffic_df.iterrows():
+        sid = row["street_id"]
+        ts  = row["timestamp"]
+ 
+        if sid not in inc_grouped.groups:
+            has_incident_list.append(0)
+            incident_severity_list.append(0)
+            continue
+ 
+        # Lấy incidents của đường này đang active tại thời điểm ts
+        group = inc_grouped.get_group(sid)
+        active = group[
+            (group["start_time"] <= ts) & (group["end_time"] >= ts)
+        ]
+ 
+        if active.empty:
+            has_incident_list.append(0)
+            incident_severity_list.append(0)
+        else:
+            has_incident_list.append(1)
+            incident_severity_list.append(int(active["severity"].max()))
+ 
+    traffic_df["has_incident"]       = has_incident_list
+    traffic_df["incident_severity"]  = incident_severity_list
+ 
+    n_active = sum(has_incident_list)
+    logger.info(f"✅ Incident merge xong: {n_active}/{len(traffic_df)} records có incident")
+ 
+    return traffic_df
 # ── BUILD DATASET ─────────────────────────────────────────────────────────────
-def build_dataset(n_days: int | None = None,roads_limit: int | None = None) -> pd.DataFrame | None:
+def build_dataset(n_days: int | None = None,roads_limit: int | None = None , predict_steps: int = 2) -> pd.DataFrame | None:
     print("=" * 50 + " Building dataset " + "=" * 50)
 
     roads = load_roads_from_db(limit=roads_limit)
@@ -121,8 +180,12 @@ def build_dataset(n_days: int | None = None,roads_limit: int | None = None) -> p
 
     print(f"[8] After engineer_features: {len(traffic_df)}")
 
-    traffic_df["has_incident"] = 0
-    traffic_df["incident_severity"] = 0
+    # ✅ Load và merge incidents thật từ DB
+    incidents_df = load_incidents(street_ids, n_days=n_days or 14)
+    print(f"[8b] Incidents loaded: {len(incidents_df)}")
+ 
+    traffic_df = merge_incidents(traffic_df, incidents_df)
+    print(f"[8c] After merge incidents: has_incident sum = {traffic_df['has_incident'].sum()}")
 
     print("\n===== NULL COUNT AFTER FEATURES =====")
     print(
@@ -135,7 +198,7 @@ def build_dataset(n_days: int | None = None,roads_limit: int | None = None) -> p
 
     traffic_df = create_labels(
         traffic_df,
-        predict_steps=PREDICT_STEPS
+        predict_steps=predict_steps
     )
 
     print(f"\n[9] After create_labels: {len(traffic_df)}")
