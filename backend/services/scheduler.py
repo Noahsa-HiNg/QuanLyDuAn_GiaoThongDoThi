@@ -168,6 +168,8 @@ def _register_default_jobs():
     log.info("📅 [APScheduler] Đã đăng ký job tự động phát hiện sự cố mỗi 10 phút")
 
 
+
+
 # ─── PUBLIC API ───────────────────────────────────────────────────────────────
 
 def start_scheduler():

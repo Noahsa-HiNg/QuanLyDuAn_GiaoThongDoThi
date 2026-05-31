@@ -1,5 +1,9 @@
+import os
+import socket
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 
 
 class Settings(BaseSettings):
@@ -45,7 +49,27 @@ class Settings(BaseSettings):
             return [self.tomtom_api_key]
         return []
 
-    model_config = ConfigDict(env_file=".env", case_sensitive=False, extra='ignore')
+    @field_validator("postgres_host", mode="before")
+    def _normalize_postgres_host(cls, value):
+        host = str(value).strip() if value is not None else ""
+        if not host:
+            return "localhost"
+
+        if host.lower() == "postgres":
+            try:
+                socket.gethostbyname(host)
+                return host
+            except OSError:
+                fallback = os.getenv("POSTGRES_HOST_FALLBACK", "localhost").strip()
+                return fallback or "localhost"
+
+        return host
+
+    model_config = ConfigDict(
+        env_file=str(Path(__file__).resolve().parent.parent / ".env"),
+        case_sensitive=False,
+        extra='ignore',
+    )
 
 
 settings = Settings()

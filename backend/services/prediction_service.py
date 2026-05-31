@@ -18,8 +18,7 @@ from ml.features import compute_features
 logger = logging.getLogger(__name__)
 
 MODEL_DIR    = os.path.join(os.path.dirname(__file__), "../ml/models")
-MODEL_PATH   = os.path.join(MODEL_DIR, "rf_model.pkl")
-SCALER_PATH  = os.path.join(MODEL_DIR, "scaler.pkl")
+MODEL_PATH   = os.path.join(MODEL_DIR, "best_model.pkl")   # ✅ SỬA: rf_model → best_model
 METRICS_PATH = os.path.join(MODEL_DIR, "metrics.json")
 
 # 🔥 TIMEZONE FIX
@@ -29,7 +28,6 @@ VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 class PredictionService:
     def __init__(self):
         self._model  = None
-        self._scaler = None
 
         # 🔥 CACHE
         self._cache_data = None
@@ -43,27 +41,27 @@ class PredictionService:
     # ──────────────────────────────────────────
 
     def _load_model(self) -> bool:
-        if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
-            logger.warning("⚠️ Model hoặc scaler chưa tồn tại")
+        if not os.path.exists(MODEL_PATH):
+            logger.warning(f"⚠️ Model chưa tồn tại tại: {MODEL_PATH}")
             return False
 
         try:
-            self._model  = joblib.load(MODEL_PATH)
-            self._scaler = joblib.load(SCALER_PATH)
+            self._model = joblib.load(MODEL_PATH)
 
-            # 🔥 check feature mismatch
+            # ✅ check feature mismatch (nếu model hỗ trợ)
             if hasattr(self._model, "n_features_in_"):
                 if self._model.n_features_in_ != len(FEATURES):
                     raise ValueError(
                         f"Feature mismatch: model expects {self._model.n_features_in_}, got {len(FEATURES)}"
                     )
 
-            logger.info("✅ Model + scaler load OK")
+            model_type = type(self._model).__name__
+            logger.info(f"✅ Model load OK — type: {model_type}")
             return True
 
         except Exception as e:
             logger.error(f"❌ Load model lỗi: {e}")
-            self._model = self._scaler = None
+            self._model = None
             return False
 
     def reload_model(self):
@@ -79,7 +77,7 @@ class PredictionService:
 
     @property
     def is_ready(self) -> bool:
-        return self._model is not None and self._scaler is not None
+        return self._model is not None
 
     # ──────────────────────────────────────────
     # Query roads
@@ -88,7 +86,7 @@ class PredictionService:
     def _get_all_roads(self, db: Session) -> list:
         from data.manual_coords import MANUAL_COORDS
         allowed_names = list(MANUAL_COORDS.keys())
-        
+
         rows = db.execute(text("""
             SELECT s.id as road_id, s.name as road_name,
                    COALESCE(ST_Y(ST_Centroid(s.geometry)), 16.0) as lat,
@@ -102,6 +100,7 @@ class PredictionService:
     # ──────────────────────────────────────────
     # 🔥 Query ALL history
     # ──────────────────────────────────────────
+
     def _get_all_history(self, db: Session, road_id: int | None = None) -> pd.DataFrame:
         """
         Query lịch sử traffic. Chỉ lấy dữ liệu trong vòng 3 giờ gần nhất để tránh OOM
@@ -163,6 +162,20 @@ class PredictionService:
         return X.values
 
     # ──────────────────────────────────────────
+    # ✅ Predict internal (không cần scaler)
+    # ──────────────────────────────────────────
+
+    def _predict_raw(self, X: np.ndarray) -> tuple[int, float]:
+        """
+        Predict và trả về (predicted_level, confidence).
+        LightGBM/CatBoost/XGBoost không cần scale feature — dùng trực tiếp.
+        """
+        pred  = int(self._model.predict(X)[0])
+        proba = self._model.predict_proba(X)[0]
+        conf  = round(float(proba.max()), 3)
+        return pred, conf
+
+    # ──────────────────────────────────────────
     # Predict 1 road
     # ──────────────────────────────────────────
 
@@ -171,18 +184,13 @@ class PredictionService:
             return {"error": "Model chưa sẵn sàng", "road_id": road_id}
 
         try:
-            # 🔥 PERF FIX: Chỉ query đúng đường này, không load cả DB
             road_df = self._get_all_history(db, road_id=road_id)
 
             if road_df.empty:
                 return {"error": "Không có dữ liệu", "road_id": road_id}
 
             X = self._build_feature_from_df(road_df)
-            X_scaled = self._scaler.transform(X)
-
-            pred  = int(self._model.predict(X_scaled)[0])
-            proba = self._model.predict_proba(X_scaled)[0]
-            conf  = round(float(proba.max()), 3)
+            pred, conf = self._predict_raw(X)   # ✅ không dùng scaler
 
             return {
                 "road_id": road_id,
@@ -203,7 +211,7 @@ class PredictionService:
         if not self.is_ready:
             raise ValueError("Model chưa sẵn sàng")
 
-        now = datetime.now(VN_TZ)  # 🔥 FIX
+        now = datetime.now(VN_TZ)
 
         # 🔥 CACHE
         if self._cache_data and self._cache_time:
@@ -232,11 +240,7 @@ class PredictionService:
                 road_df = grouped.get_group(road_id)
 
                 X = self._build_feature_from_df(road_df)
-                X_scaled = self._scaler.transform(X)
-
-                pred  = int(self._model.predict(X_scaled)[0])
-                proba = self._model.predict_proba(X_scaled)[0]
-                conf  = round(float(proba.max()), 3)
+                pred, conf = self._predict_raw(X)   # ✅ không dùng scaler
 
                 results.append({
                     "road_id": road_id,

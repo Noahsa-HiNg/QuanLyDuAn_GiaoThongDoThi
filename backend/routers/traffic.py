@@ -14,6 +14,10 @@ Endpoints:
     GET  /api/traffic/crawl/loop/status    [CHẾ ĐỘ 2] Trạng thái vòng lặp
 
     POST /api/traffic/crawl/{street_id}    [CHẾ ĐỘ 3] Cào 1 đường duy nhất — 1 lần
+
+    ─── Đồng bộ max_speed từ HERE freeflow ───────────────────
+    POST /api/traffic/sync-max-speed       Cập nhật max_speed toàn bộ đường (nền)
+    GET  /api/traffic/sync-max-speed/status Trạng thái lần đồng bộ gần nhất
 """
 
 from typing import Optional
@@ -949,6 +953,92 @@ def trigger_crawl_one(
         pass
 
     return result
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ĐỒNG BỘ MAX_SPEED TỪ FREEFLOW HERE API (chạy 1 lần, nền)
+# ═════════════════════════════════════════════════════════════════════════════
+
+_sync_speed_status: dict = {
+    "running"    : False,
+    "started_at" : None,
+    "last_result": None,
+}
+_sync_speed_lock = threading.Lock()
+
+
+def _run_sync_max_speed_background(db: Session):
+    """Background task: gọi sync_max_speed_from_here() rồi cập nhật trạng thái."""
+    try:
+        from services.here_ingestion_helper import sync_max_speed_from_here
+        result = sync_max_speed_from_here(db)
+        # Sau khi cập nhật max_speed → xóa cache geometry để frontend thấy giá trị mới
+        redis_client.delete("streets:geometry")
+    except Exception as e:
+        result = {"error": str(e)}
+    finally:
+        db.close()
+        with _sync_speed_lock:
+            _sync_speed_status["running"]     = False
+            _sync_speed_status["last_result"] = result
+
+
+@router.post(
+    "/traffic/sync-max-speed",
+    summary="Đồng bộ tốc độ tối đa từ freeflow HERE API",
+    description="""
+Gọi HERE Flow API và **cập nhật `max_speed`** của tất cả tuyến đường theo giá trị freeflow thực tế.
+
+**Cơ chế:**
+- Gọi HERE `/v7/flow` cho **7 quận Đà Nẵng** (7 request)
+- Match từng đường trong DB với segment HERE gần nhất (ngưỡng ≤ 500m)
+- Chuẩn hóa freeflow → mức giới hạn ATGT VN gần nhất (20/30/40/50/60/70/80/100/120 km/h)
+- Ghi đè `max_speed` **không điều kiện** — kể cả khi chênh lệch nhỏ
+
+**Chạy nền** — trả về ngay, gọi `GET /api/traffic/sync-max-speed/status` để xem kết quả.
+
+⏱ Thời gian ước tính: ~15–30 giây (7 request × 0.5s delay + xử lý KDTree).
+""",
+    status_code=202,
+)
+def trigger_sync_max_speed(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    with _sync_speed_lock:
+        if _sync_speed_status["running"]:
+            raise HTTPException(
+                status_code=409,
+                detail="Đang có lần đồng bộ max_speed đang chạy. Vui lòng đợi hoàn tất.",
+            )
+        _sync_speed_status["running"]    = True
+        _sync_speed_status["started_at"] = datetime.now(
+            timezone(timedelta(hours=7))
+        ).strftime("%H:%M:%S %d/%m/%Y +07")
+        _sync_speed_status["last_result"] = None
+
+    background_tasks.add_task(_run_sync_max_speed_background, db)
+
+    return {
+        "message"   : "✅ Đã khởi động đồng bộ max_speed từ HERE freeflow",
+        "started_at": _sync_speed_status["started_at"],
+        "status_url": "/api/traffic/sync-max-speed/status",
+        "note"      : "Sau khi hoàn tất, gọi GET /api/traffic/sync-max-speed/status để xem chi tiết.",
+    }
+
+
+@router.get(
+    "/traffic/sync-max-speed/status",
+    summary="Trạng thái lần đồng bộ max_speed gần nhất",
+)
+def get_sync_max_speed_status():
+    with _sync_speed_lock:
+        return {
+            "running"    : _sync_speed_status["running"],
+            "started_at" : _sync_speed_status["started_at"],
+            "last_result": _sync_speed_status["last_result"],
+        }
 
 
 # ═════════════════════════════════════════════════════════════════════════════

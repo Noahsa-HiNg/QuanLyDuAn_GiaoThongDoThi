@@ -13,8 +13,10 @@ Dùng làm feature đầu vào cho AI model:
 """
 
 from sqlalchemy import (
+
     Column, Integer, String, Boolean, Text, Float,
-    ForeignKey, Index, CheckConstraint, TIMESTAMP
+    ForeignKey, Index, CheckConstraint, TIMESTAMP, UniqueConstraint
+
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -65,7 +67,17 @@ class Incident(Base):
     # Dùng Partial Index để chỉ index bản ghi active → tiết kiệm bộ nhớ
     is_active = Column(Boolean, default=True, nullable=False)
 
-    # FK → user tạo incident (CSGT hoặc NULL nếu tự động từ community)
+    # ID tai nạn gốc từ HERE Traffic Incidents API
+    # NULL  → sự cố do CSGT nhập tay (manual)
+    # có giá trị → cào tự động từ HERE (dùng để dedup: không insert trùng)
+    here_incident_id = Column(String(150), nullable=True, unique=True, index=True)
+
+    # Nguồn tạo sự cố:
+    #   'manual'   — CSGT / Admin nhập tay (mặc định)
+    #   'here_api' — Cào tự động từ HERE Traffic Incidents API
+    source = Column(String(20), nullable=False, default="manual")
+
+    # FK → user tạo incident (CSGT hoặc NULL nếu tự động từ community/here_api)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # Tọa độ GPS cụ thể của điểm xảy ra sự cố (nếu có)
@@ -89,12 +101,19 @@ class Incident(Base):
             "status IN ('active', 'dispatched', 'resolved')",
             name="check_status_valid"
         ),
+        CheckConstraint(
+            "source IN ('manual', 'here_api')",
+            name="check_source_valid"
+        ),
 
         # Partial Index: chỉ index bản ghi đang active
         # Nhỏ hơn full index nhưng nhanh hơn cho query thường dùng nhất:
         # SELECT * FROM incidents WHERE is_active = TRUE AND street_id = X
         Index("idx_incidents_active_street", "street_id",
               postgresql_where="is_active = TRUE"),
+
+        # Index hỗ trợ query theo nguồn (manual vs here_api)
+        Index("idx_incidents_source", "source"),
     )
 
     # ─── RELATIONSHIPS ────────────────────────────────────────
@@ -109,5 +128,6 @@ class Incident(Base):
     def __repr__(self):
         return (
             f"Incident(id={self.id}, street_id={self.street_id}, "
-            f"type='{self.type}', severity={self.severity}, status='{self.status}')"
+            f"type='{self.type}', severity={self.severity}, "
+            f"status='{self.status}', source='{self.source}')"
         )

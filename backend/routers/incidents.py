@@ -3,11 +3,11 @@
 incidents.py — CRUD API cho sự kiện lô cốt / sự cố giao thông
 
 Endpoints:
-    GET    /api/incidents          — Danh sách sự cố (filter + phân trang)
-    GET    /api/incidents/{id}     — Chi tiết 1 sự cố
-    POST   /api/incidents          — Tạo sự cố mới (CSGT/Admin)
-    PUT    /api/incidents/{id}     — Cập nhật sự cố (CSGT/Admin)
-    DELETE /api/incidents/{id}     — Xóa vĩnh viễn sự cố (Admin)
+    GET    /api/incidents                     — Danh sách sự cố (filter + phân trang)
+    GET    /api/incidents/{id}                — Chi tiết 1 sự cố
+    POST   /api/incidents                     — Tạo sự cố mới (CSGT/Admin)
+    PUT    /api/incidents/{id}                — Cập nhật sự cố (CSGT/Admin)
+    DELETE /api/incidents/{id}                — Xóa vĩnh viễn sự cố (Admin)
 
 Quyền truy cập: Chỉ CSGT hoặc Admin (yêu cầu JWT token hợp lệ + role phù hợp)
 """
@@ -15,7 +15,7 @@ Quyền truy cập: Chỉ CSGT hoặc Admin (yêu cầu JWT token hợp lệ + r
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -26,6 +26,11 @@ from schemas.incident import IncidentCreate, IncidentUpdate, IncidentOut
 from services.audit import audit_action
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
+
+
+
+
+
 
 
 # ─────────────────────────────────────────────────────────────
@@ -70,6 +75,96 @@ def list_incidents(
         .all()
     )
     return incidents
+
+
+# ─────────────────────────────────────────────────────────────
+# 10. GET /api/incidents/map-data — Dữ liệu incidents + lat/lon cho Map
+# Yêu cầu quyền CSGT/Admin → frontend bản đồ gọi kèm token
+# ─────────────────────────────────────────────────────────────
+@router.get(
+    "/map-data",
+    summary="Lấy danh sách incidents kèm tọa độ GPS để hiển thị trên bản đồ",
+    description=(
+        "Trả về tất cả incidents đang active, join với geometry của đường "
+        "để lấy lat/lon centroid. Yêu cầu quyền CSGT/Admin."
+    ),
+    status_code=status.HTTP_200_OK,
+)
+def get_incidents_map_data(
+    db: Session = Depends(get_db),
+    type: Optional[str] = Query(None, description="Lọc theo loại: accident, roadblock, event, community"),
+    source: Optional[str] = Query(None, description="Lọc theo nguồn: manual, here_api"),
+    active_only: bool = Query(True, description="Chỉ lấy incidents đang active"),
+    current_user: User = Depends(require_csgt),
+):
+    from sqlalchemy import text as _sql_text
+
+    # Build WHERE clause
+    filters = []
+    params: dict = {}
+    if active_only:
+        filters.append("i.is_active = TRUE")
+    if type:
+        filters.append("i.type = :inc_type")
+        params["inc_type"] = type
+    if source:
+        filters.append("i.source = :source")
+        params["source"] = source
+
+    and_clause = ("AND " + " AND ".join(filters)) if filters else ""
+
+    sql = _sql_text(f"""
+        SELECT
+            i.id,
+            i.type,
+            i.severity,
+            i.status,
+            i.description,
+            i.source,
+            i.here_incident_id  AS external_id,
+            i.start_time,
+            i.end_time,
+            i.is_active,
+            s.name              AS street_name,
+            d.name              AS district,
+            ST_Y(ST_Centroid(s.geometry)) AS lat,
+            ST_X(ST_Centroid(s.geometry)) AS lon
+        FROM incidents i
+        JOIN streets s ON s.id = i.street_id
+        LEFT JOIN districts d ON d.id = s.district_id
+        WHERE s.geometry IS NOT NULL
+          { "AND " + " AND ".join(filters) if filters else "" }
+        ORDER BY i.start_time DESC
+        LIMIT 500
+    """)
+
+    rows = db.execute(sql, params).fetchall()
+
+    features = []
+    for r in rows:
+        if r.lat is None or r.lon is None:
+            continue
+        features.append({
+            "id"         : r.id,
+            "lat"        : float(r.lat),
+            "lon"        : float(r.lon),
+            "type"       : r.type,
+            "severity"   : r.severity,
+            "status"     : r.status,
+            "description": r.description or "",
+            "source"     : r.source,
+            "external_id": r.external_id,
+            "street_name": r.street_name,
+            "district"   : r.district,
+            "start_time" : r.start_time.isoformat() if r.start_time else None,
+            "end_time"   : r.end_time.isoformat()   if r.end_time   else None,
+            "is_active"  : r.is_active,
+        })
+
+    return {
+        "total"   : len(features),
+        "incidents": features,
+    }
 
 
 # ─────────────────────────────────────────────────────────────
@@ -212,3 +307,18 @@ def delete_incident(
     db.delete(incident)
     db.commit()
     return {"message": f"Đã xóa thành công sự cố id={incident_id} ra khỏi hệ thống"}
+
+
+
+
+
+
+
+# ─────────────────────────────────────────────────────────────
+# 10. GET /api/incidents/map-data — Dữ liệu incidents + lat/lon cho Map
+# Yêu cầu quyền CSGT/Admin → frontend bản đồ gọi kèm token
+# ─────────────────────────────────────────────────────────────
+
+
+
+
