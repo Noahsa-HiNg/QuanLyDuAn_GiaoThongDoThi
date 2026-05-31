@@ -32,6 +32,23 @@ const AdminUsers: React.FC = () => {
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Custom confirm modal state
+  const [customConfirm, setCustomConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setCustomConfirm({ isOpen: true, title, message, onConfirm });
+  };
+
   // 1. Fetch Users
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['adminUsers'],
@@ -115,9 +132,13 @@ const AdminUsers: React.FC = () => {
 
   const handleDeleteUser = (id: number) => {
     if (id === currentUser?.id) return; // Prevent deleting self
-    if (window.confirm('Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản người dùng này?')) {
-      deleteUserMutation.mutate(id);
-    }
+    showConfirm(
+      'Xác nhận xóa tài khoản',
+      'Bạn có chắc chắn muốn xóa vĩnh viễn tài khoản người dùng này?',
+      () => {
+        deleteUserMutation.mutate(id);
+      }
+    );
   };
 
   return (
@@ -355,6 +376,40 @@ const AdminUsers: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal (S5) */}
+      {customConfirm.isOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[1100] p-4">
+          <div className="bg-slate-900/95 border border-white/10 rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden text-white animate-fade-in">
+            <div className="p-6 text-center space-y-4">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-500/10 border border-red-500/20 text-red-400">
+                <Trash2 size={24} />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-base font-bold text-white">{customConfirm.title}</h3>
+                <p className="text-xs text-slate-400">{customConfirm.message}</p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setCustomConfirm({ ...customConfirm, isOpen: false })}
+                  className="flex-1 py-2 border border-white/10 hover:bg-slate-800 text-slate-350 rounded-lg text-xs font-semibold transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  onClick={() => {
+                    customConfirm.onConfirm();
+                    setCustomConfirm({ ...customConfirm, isOpen: false });
+                  }}
+                  className="flex-1 py-2 bg-red-600 hover:bg-red-550 text-white rounded-lg text-xs font-bold shadow-md transition cursor-pointer"
+                >
+                  Xác nhận xóa
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

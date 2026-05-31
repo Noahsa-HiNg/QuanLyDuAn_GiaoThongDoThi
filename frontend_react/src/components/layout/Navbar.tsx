@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { incidentsApi } from '../../api/incidents.api';
 import { fmtTimestampVN } from '../../utils/formatters';
-import { LogOut, User, Navigation, BarChart2, Shield, AlertCircle, Users, Calendar, Map, X, Bell } from 'lucide-react';
+import { LogOut, User, Navigation, BarChart2, Shield, AlertCircle, Users, Calendar, Map, X } from 'lucide-react';
 
 const Navbar: React.FC = () => {
   const { user, isLoggedIn, logout } = useAuthStore();

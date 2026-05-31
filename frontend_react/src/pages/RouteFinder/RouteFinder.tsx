@@ -158,7 +158,7 @@ const RouteFinder: React.FC = () => {
   const isShortestRecommended = routeShortest && routeFastest && routeShortest.estimated_time_min <= routeFastest.estimated_time_min;
 
   return (
-    <div className="w-full h-[calc(100vh-64px)] mt-16 flex flex-col md:flex-row overflow-hidden">
+    <div className="route-finder-container w-full h-[calc(100vh-64px)] mt-16 flex flex-col md:flex-row overflow-hidden">
       {/* 1. Left Form Panel */}
       <div className="w-full md:w-[420px] bg-slate-950/80 backdrop-blur-md border-r border-white/10 shadow-2xl flex flex-col h-full overflow-y-auto text-white">
         <div className="p-5 flex-grow">

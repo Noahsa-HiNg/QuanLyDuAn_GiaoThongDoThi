@@ -24,6 +24,21 @@ async def predict_30min(db: Session = Depends(get_db)):
             detail=str(e)
         )
 
+@router.get("/5min", response_model=List[schemas.PredictedRecord])
+async def predict_5min(db: Session = Depends(get_db)):
+    if not prediction_service.is_ready:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model chưa sẵn sàng. Vui lòng chạy train trước."
+        )
+    try:
+        return prediction_service.predict_all(db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e)
+        )
+
 @router.get("/30min/{road_id}")
 async def predict_one(road_id: int, db: Session = Depends(get_db)):
     if not prediction_service.is_ready:

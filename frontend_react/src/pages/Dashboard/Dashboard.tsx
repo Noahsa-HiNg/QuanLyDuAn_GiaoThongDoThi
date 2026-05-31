@@ -24,12 +24,9 @@ import {
   Clock,
   Lock,
   Search,
-  Filter,
   Brain,
   Info,
-  Calendar,
-  FileText,
-  MapPin
+  FileText
 } from 'lucide-react';
 
 const WEEKDAYS = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ Nhật'];
@@ -158,7 +155,7 @@ const Dashboard: React.FC = () => {
       { name: "Nguyễn Lương Bằng", district: "Liên Chiểu", cur: 0, pred: 0, conf: 0.90 },
     ];
 
-    const results = streets.map((s, idx) => {
+    const results = streets.map((s) => {
       const geom = geometries.find(g => g.street_id === s.street_id);
       const cur = s.congestion_level !== null ? s.congestion_level : 0;
       const pred = Math.max(0, Math.min(2, cur + (Math.random() > 0.6 ? 1 : Math.random() > 0.6 ? -1 : 0)));

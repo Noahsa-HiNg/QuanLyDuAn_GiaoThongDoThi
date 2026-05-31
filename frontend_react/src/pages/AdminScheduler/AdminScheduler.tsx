@@ -12,7 +12,8 @@ import {
   Clock, 
   RefreshCw, 
   Database,
-  ArrowRight
+  ArrowRight,
+  Terminal
 } from 'lucide-react';
 import { fmtTimestampVN } from '../../utils/formatters';
 
@@ -37,6 +38,19 @@ const AdminScheduler: React.FC = () => {
     queryFn: () => schedulerApi.getCrawlStatus(),
     refetchInterval: 10000,
   });
+
+  const { data: logsData, refetch: refetchLogs } = useQuery({
+    queryKey: ['crawlLogs'],
+    queryFn: () => schedulerApi.getCrawlLogs(150),
+    refetchInterval: 10000,
+  });
+
+  const logEndRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logsData?.logs]);
 
   // Mutations
   const pauseMutation = useMutation({
@@ -287,6 +301,59 @@ const AdminScheduler: React.FC = () => {
             Không có tác vụ lập lịch nền nào hoạt động.
           </div>
         )}
+      </div>
+
+      {/* 4. Crawler Logs Console */}
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-white/10 bg-slate-950/40 flex items-center justify-between">
+          <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+            <Terminal size={14} className="text-green-500" />
+            Nhật ký cào dữ liệu thời gian thực (Crawler Logs)
+          </h3>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[10px] text-green-400 font-semibold bg-green-500/10 px-2 py-0.5 rounded border border-green-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+              Live Tracking (10s)
+            </div>
+            <button
+              onClick={() => refetchLogs()}
+              className="p-1 border border-white/10 bg-slate-900/60 rounded text-slate-400 hover:bg-white/5 hover:text-white transition cursor-pointer text-xs flex items-center gap-1"
+              title="Tải lại logs"
+            >
+              <RefreshCw size={12} />
+              Tải lại
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4 bg-slate-950/95 font-mono text-[11px] leading-relaxed text-slate-350 h-80 overflow-y-auto border-t border-white/5 space-y-1 select-text">
+          {logsData?.logs && logsData.logs.length > 0 ? (
+            logsData.logs.map((logLine, index) => {
+              let lineClass = "text-slate-300";
+              if (logLine.includes("[ERROR]")) {
+                lineClass = "text-red-400 font-bold";
+              } else if (logLine.includes("[WARNING]")) {
+                lineClass = "text-amber-400 font-bold";
+              } else if (logLine.includes("✅") || logLine.includes("success") || logLine.includes("OK")) {
+                lineClass = "text-emerald-400";
+              }
+              return (
+                <div key={`log-${index}`} className={`${lineClass} whitespace-pre-wrap`}>
+                  {logLine}
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-slate-500 text-center py-10 italic">
+              Không tìm thấy dòng log nào trong file logs/crawler.log hoặc hệ thống chưa bắt đầu cào.
+            </div>
+          )}
+          <div ref={logEndRef} />
+        </div>
+        <div className="px-4 py-2 bg-slate-950 border-t border-white/5 text-[10px] text-slate-500 flex justify-between">
+          <span>Tổng số dòng: {logsData?.total_lines ?? 0}</span>
+          <span>Đang hiển thị {logsData?.returned_lines ?? 0} dòng cuối</span>
+        </div>
       </div>
     </div>
   );

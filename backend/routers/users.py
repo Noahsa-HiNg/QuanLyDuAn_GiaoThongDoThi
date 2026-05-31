@@ -12,13 +12,14 @@ Endpoints:
 Tất cả endpoint đều yêu cầu quyền Admin.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.orm import Session
 from database import get_db
 from models.user import User
 from schemas.user import UserOut, UserCreateRequest, UserLockRequest, OfficerOut
 from auth.dependencies import require_admin, require_csgt
 from auth.password import hash_password
+from services.audit import audit_action
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -35,8 +36,8 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Trả về danh sách tất cả tài khoản. Chỉ Admin được xem."""
-    return db.query(User).order_by(User.created_at.desc()).all()
+    """Trả về danh sách tài khoản đang hoạt động. Chỉ Admin được xem."""
+    return db.query(User).filter(User.is_active == True).order_by(User.created_at.desc()).all()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -110,8 +111,10 @@ def get_user(
     status_code=201,
     summary="Tạo tài khoản mới (Admin only)",
 )
+@audit_action(action="CREATE_USER", target_table="users")
 def create_user(
     payload: UserCreateRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -164,8 +167,10 @@ Admin khóa tài khoản vô thời hạn.
 - Chỉ Admin gọi `/unlock` mới mở được.
 """,
 )
+@audit_action(action="LOCK_USER", target_table="users")
 def lock_user(
     user_id: int,
+    request: Request,
     payload: UserLockRequest = UserLockRequest(),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -196,8 +201,10 @@ def lock_user(
     response_model=UserOut,
     summary="Mở khóa tài khoản (Admin only)",
 )
+@audit_action(action="UNLOCK_USER", target_table="users")
 def unlock_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -224,6 +231,7 @@ def unlock_user(
 # ─────────────────────────────────────────────────────────────
 @router.delete(
     "/{user_id}",
+    response_model=UserOut,
     status_code=200,
     summary="Vô hiệu hóa tài khoản (Admin only)",
     description="""
@@ -233,8 +241,10 @@ Lý do: giữ lại audit log, incident history liên kết với user này.
 Nếu muốn xóa hoàn toàn khỏi DB cần thực hiện thủ công qua DB console.
 """,
 )
+@audit_action(action="DEACTIVATE_USER", target_table="users")
 def deactivate_user(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -250,4 +260,5 @@ def deactivate_user(
 
     user.is_active = False
     db.commit()
-    return {"message": f"Tài khoản '{user.email}' đã bị vô hiệu hóa (is_active=False)"}
+    db.refresh(user)
+    return user

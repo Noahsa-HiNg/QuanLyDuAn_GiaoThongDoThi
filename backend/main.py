@@ -31,6 +31,9 @@ from routers import route
 from routers import stats
 from routers import incidents
 from routers import feedback
+from routers import community
+from routers import emergency
+from routers import audit
 log = logging.getLogger("main")
 
 
@@ -51,8 +54,16 @@ async def lifespan(app: FastAPI):
     """
     import os
     from services.scheduler import start_scheduler, stop_scheduler
-    from database import engine
+    from database import engine, Base
+    import models
     from sqlalchemy import text as _text
+
+    # ── Tự động tạo các bảng DB nếu chưa có ─────────────────────────────
+    try:
+        Base.metadata.create_all(bind=engine)
+        log.info("✅ Database tables verified/created successfully.")
+    except Exception as e:
+        log.warning(f"⚠️ Lỗi tự động tạo bảng DB: {e}")
 
     # ── Tạo DB index hiệu năng (chỉ chạy 1 lần, idempotent) ─────────────
     try:
@@ -133,6 +144,9 @@ app.include_router(route.router,     prefix="/api", tags=["Route"])
 app.include_router(stats.router,     prefix="/api", tags=["Stats"])
 app.include_router(incidents.router, prefix="/api", tags=["Incidents"])
 app.include_router(feedback.router, prefix="/api", tags=["Feedback"])
+app.include_router(community.router, prefix="/api", tags=["Community"])
+app.include_router(emergency.router, prefix="/api", tags=["System Announcement"])
+app.include_router(audit.router,     prefix="/api", tags=["Audit Logs"])
 
 
 # ─────────────────────────────────────────────────────────────

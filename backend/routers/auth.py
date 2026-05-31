@@ -5,13 +5,14 @@ GET  /api/auth/me      → trả thông tin user đang đăng nhập (cần toke
 POST /api/auth/logout  → (stateless: client xóa token phía FE)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from database import get_db
 from schemas.auth import LoginRequest, TokenResponse, UserInfo
 from services.auth_service import auth_service
 from auth.dependencies import get_current_user
 from models.user import User
+from services.audit import audit_action
 
 
 router = APIRouter(prefix="/auth")
@@ -20,7 +21,8 @@ router = APIRouter(prefix="/auth")
     response_model=TokenResponse,
     summary="Đăng nhập và nhận JWT token",
 )
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+@audit_action(action="LOGIN", target_table="users")
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     """
     Đăng nhập với email + password.
     - **email**: địa chỉ email đã đăng ký
@@ -52,9 +54,10 @@ def get_me(current_user: User = Depends(get_current_user)):
     "/logout",
     summary="Đăng xuất (stateless)",
 )
-def logout():
+@audit_action(action="LOGOUT", target_table="users")
+def logout(request: Request, current_user: User = Depends(get_current_user)):
     """
     JWT là stateless — server không lưu token.
     Client cần tự xóa token khỏi session_state / localStorage.
     """
-    return {"message": "Đăng xuất thành công. Vui lòng xóa token phía client."}
+    return {"message": "Đăng xuất thành công."}

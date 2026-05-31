@@ -43,4 +43,8 @@ export const schedulerApi = {
     const response = await api.get<CrawlStatus>('/api/traffic/crawl/status');
     return response.data;
   },
+  getCrawlLogs: async (limit: number = 150): Promise<{ logs: string[]; total_lines: number; returned_lines: number }> => {
+    const response = await api.get(`/api/traffic/crawl/logs?limit=${limit}`);
+    return response.data;
+  },
 };

@@ -34,6 +34,8 @@ from .feedback import Feedback          # feedback     → FK: streets.id
 # ── Bảng phụ thuộc vào users ─────────────────────────────────
 from .audit_log import AuditLog         # audit_log     → FK: users.id
 from .system_config import SystemConfig # system_config → FK: users.id
+from .community_report import CommunityReport # community_reports → FK: streets.id
+from .emergency_banner import EmergencyBanner # emergency_banners
 
 # ── Bảng độc lập (không FK) ────────────────────────────────────────
 from .weather_snapshot import WeatherSnapshot  # weather_snapshots → không FK
@@ -50,4 +52,6 @@ __all__ = [
     "AuditLog",
     "SystemConfig",
     "WeatherSnapshot",
+    "CommunityReport",
+    "EmergencyBanner",
 ]
