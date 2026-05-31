@@ -1,10 +1,73 @@
-# ml/prepare_dataset.py
-"""Script độc lập để kiểm tra dataset trước khi train."""
-from ml.features import build_training_data
+import pandas as pd
+import os
+from sqlalchemy import create_engine
+from datetime import datetime, timedelta
+# ── CONFIG ─────────────────────────────────────────────────────────────────────
+DB_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://myadmin:123456@localhost:5432/qlda_dothithongminh"
+)
+engine = create_engine(DB_URL)
+# ── LOAD DATA ─────────────────────────────────────────────────────────────────
+def load_roads_from_db(limit: int | None = None) -> pd.DataFrame:
 
-if __name__ == "__main__":
-    df = build_training_data()
-    print(f"Dataset shape: {df.shape}")
-    print(f"Label distribution:\n{df['label'].value_counts().sort_index()}")
-    print(f"\nSample features:\n{df.head(3).to_string()}")
-    print(f"\nMissing values:\n{df.isnull().sum()}")
+    query = """
+        SELECT
+            id,
+            name,
+            district_id,
+            max_speed,
+            length_km * 1000 AS road_length
+        FROM streets
+    """
+
+    if limit is not None:
+        query += f" LIMIT {int(limit)}"
+
+    return pd.read_sql(query, engine)
+
+
+def load_traffic_data(street_ids: list,n_days: int | None = None):
+    query = """
+        SELECT
+            street_id,
+            "timestamp",
+            avg_speed,
+            congestion_level,
+            free_flow_speed,
+            EXTRACT(HOUR FROM "timestamp") AS hour,
+            EXTRACT(DOW FROM "timestamp") AS day_of_week
+        FROM traffic_data
+        WHERE street_id = ANY(%s)
+    """
+
+    params = [street_ids]
+
+    if n_days is not None:
+        query += ' AND "timestamp" >= %s'
+        params.append(
+            datetime.utcnow() - timedelta(days=n_days)
+        )
+
+    query += """
+        ORDER BY street_id, "timestamp"
+    """
+
+    return pd.read_sql(query, engine, params=tuple(params))
+
+
+def load_incidents(street_ids: list, n_days: int = 14) -> pd.DataFrame:
+    since = datetime.utcnow() - timedelta(days=n_days)
+
+    query = """
+        SELECT
+            street_id,
+            start_time,
+            end_time,
+            severity
+        FROM incidents
+        WHERE street_id = ANY(%s)
+          AND start_time >= %s
+    """
+
+    return pd.read_sql(query, engine, params=(street_ids, since))

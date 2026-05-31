@@ -1,13 +1,45 @@
 {
-  "accuracy": 0.8265,
-  "f1_weighted": 0.802,
-  "rmse": 0.4165,
-  "best_params": {
-    "max_depth": 8,
-    "min_samples_split": 2,
-    "n_estimators": 150
-  },
-  "n_train": 13440,
-  "n_test": 3360,
-  "trained_at": "2026-04-24T01:19:32.575688"
+  "best_model": "LightGBM",
+  "trained_at": "2026-05-31T06:26:59.870361+00:00",
+  "features": [
+    "hour",
+    "day_of_week",
+    "is_weekend",
+    "is_rush_hour",
+    "current_speed",
+    "free_flow_speed",
+    "speed_ratio",
+    "speed_delta",
+    "rolling_speed_3",
+    "road_length",
+    "max_speed",
+    "district_id",
+    "avg_speed_1h_ago",
+    "avg_speed_yesterday",
+    "has_incident",
+    "incident_severity"
+  ],
+  "results": [
+    {
+      "model": "LightGBM",
+      "accuracy": 0.8200872663600891,
+      "precision": 0.8231126309311559,
+      "recall": 0.8200872663600891,
+      "f1": 0.8213198674354005
+    },
+    {
+      "model": "CatBoost",
+      "accuracy": 0.820752119292267,
+      "precision": 0.8227746121829986,
+      "recall": 0.820752119292267,
+      "f1": 0.8210082939951511
+    },
+    {
+      "model": "XGBoost",
+      "accuracy": 0.8196354017123787,
+      "precision": 0.820978852251163,
+      "recall": 0.8196354017123787,
+      "f1": 0.8199510624931216
+    }
+  ]
 }
