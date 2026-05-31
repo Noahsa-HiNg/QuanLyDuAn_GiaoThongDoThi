@@ -15,7 +15,7 @@ Quyền truy cập: Chỉ CSGT hoặc Admin (yêu cầu JWT token hợp lệ + r
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -23,6 +23,7 @@ from models.incident import Incident
 from models.user import User
 from auth.dependencies import require_csgt
 from schemas.incident import IncidentCreate, IncidentUpdate, IncidentOut
+from services.audit import audit_action
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -205,8 +206,10 @@ def get_incident(
         "Trường `created_by` được tự động gán từ tài khoản đang đăng nhập."
     ),
 )
+@audit_action(action="CREATE_INCIDENT", target_table="incidents")
 def create_incident(
     payload: IncidentCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_csgt),
 ):
@@ -243,9 +246,11 @@ def create_incident(
         "đặt `is_active = False` và điền `end_time` nếu chưa có."
     ),
 )
+@audit_action(action="UPDATE_INCIDENT", target_table="incidents")
 def update_incident(
     incident_id: int,
     payload: IncidentUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_csgt),
 ):
@@ -285,8 +290,10 @@ def update_incident(
         "Thường dùng để xóa dữ liệu nhập sai."
     ),
 )
+@audit_action(action="DELETE_INCIDENT", target_table="incidents")
 def delete_incident(
     incident_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_csgt),  # CSGT cũng được xóa
 ):

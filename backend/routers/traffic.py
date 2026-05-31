@@ -1279,3 +1279,137 @@ def _weather_group_label(group: int) -> str:
         3: "⚡ Mưa nặng",
         4: "🌫️ Sương mù/khác",
     }.get(group or 0, "Không xác định")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/traffic/history — Lấy lịch sử traffic của tất cả đường tại mốc giờ trước
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get(
+    "/traffic/history",
+    summary="Lấy lịch sử giao thông theo số giờ trước",
+    description="Lấy dữ liệu kẹt xe tại mốc thời gian X giờ trước (tối đa 6 giờ).",
+)
+def get_traffic_history(
+    hours_ago: int = Query(..., ge=1, le=6),
+    db: Session = Depends(get_db),
+):
+    # Lấy timezone Đà Nẵng
+    now_vn = datetime.now(TZ_DANANG)
+    target_time = now_vn - timedelta(hours=hours_ago)
+    
+    # Tạo cửa sổ tìm kiếm dữ liệu xung quanh mốc target_time
+    start_win = target_time - timedelta(minutes=15)
+    end_win = target_time + timedelta(minutes=15)
+    
+    # Query các bản ghi traffic gần nhất cho từng street_id, segment_idx trong cửa sổ
+    # Dùng CONGESTION_COLORS từ file constants/colors.py hoặc định nghĩa trực tiếp nếu chưa có.
+    # Trong latest_traffic / state:
+    # CONGESTION_COLORS = {0: [34, 197, 94, 220], 1: [234, 179, 8, 220], 2: [239, 68, 68, 220], None: [100, 116, 139, 150]}
+    congestion_colors = {
+        0: [34, 197, 94, 220],
+        1: [234, 179, 8, 220],
+        2: [239, 68, 68, 220],
+        None: [100, 116, 139, 150]
+    }
+    
+    rows = db.execute(text("""
+        SELECT DISTINCT ON (td.street_id, td.segment_idx)
+            td.street_id,
+            td.segment_idx,
+            td.avg_speed,
+            td.congestion_level,
+            td.timestamp
+        FROM traffic_data td
+        WHERE td.timestamp BETWEEN :start_win AND :end_win
+        ORDER BY td.street_id, td.segment_idx, td.timestamp DESC
+    """), {"start_win": start_win, "end_win": end_win}).fetchall()
+    
+    # Nếu không tìm thấy, mở rộng cửa sổ lên 45 phút
+    if not rows:
+        start_win = target_time - timedelta(minutes=45)
+        end_win = target_time + timedelta(minutes=45)
+        rows = db.execute(text("""
+            SELECT DISTINCT ON (td.street_id, td.segment_idx)
+                td.street_id,
+                td.segment_idx,
+                td.avg_speed,
+                td.congestion_level,
+                td.timestamp
+            FROM traffic_data td
+            WHERE td.timestamp BETWEEN :start_win AND :end_win
+            ORDER BY td.street_id, td.segment_idx, td.timestamp DESC
+        """), {"start_win": start_win, "end_win": end_win}).fetchall()
+
+    # Phân nhóm theo street_id
+    from collections import defaultdict
+    street_segs = defaultdict(list)
+    for row in rows:
+        street_segs[row.street_id].append(row)
+        
+    streets_out = []
+    for street_id, segs in sorted(street_segs.items()):
+        levels = [s.congestion_level for s in segs if s.congestion_level is not None]
+        speeds = [s.avg_speed        for s in segs if s.avg_speed        is not None]
+        avg_cong = round(sum(levels) / len(levels)) if levels else None
+        avg_spd  = round(sum(speeds)  / len(speeds), 1) if speeds else None
+        
+        segments_out = [
+            {
+                "segment_idx": s.segment_idx,
+                "congestion_level": s.congestion_level,
+                "avg_speed": s.avg_speed,
+                "color": congestion_colors.get(s.congestion_level, congestion_colors[None]),
+            }
+            for s in segs
+        ]
+        
+        streets_out.append({
+            "street_id": street_id,
+            "congestion_level": avg_cong,
+            "congestion_label": CONGESTION_LABEL.get(avg_cong),
+            "avg_speed": avg_spd,
+            "color": congestion_colors.get(avg_cong, congestion_colors[None]),
+            "timestamp": segs[0].timestamp.isoformat() if segs[0].timestamp else None,
+            "segments": segments_out,
+        })
+        
+    return {
+        "hours_ago": hours_ago,
+        "target_time": target_time.isoformat(),
+        "total": len(streets_out),
+        "streets": streets_out,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/traffic/crawl/logs — Lấy nhật ký cào dữ liệu (logs) mới nhất
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get(
+    "/traffic/crawl/logs",
+    summary="Lấy nhật ký cào dữ liệu (logs) mới nhất",
+    description="Đọc 150 dòng cuối cùng từ file logs/crawler.log.",
+)
+def get_crawler_logs(
+    limit: int = Query(150, ge=10, le=500),
+    current_user: User = Depends(require_admin),
+):
+    import os
+    log_path = "logs/crawler.log"
+    if not os.path.exists(log_path):
+        return {"logs": [], "message": "Chưa có file log crawler.log"}
+        
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+        # Lấy limit dòng cuối cùng
+        last_lines = lines[-limit:]
+        return {
+            "logs": [line.rstrip() for line in last_lines],
+            "total_lines": len(lines),
+            "returned_lines": len(last_lines)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi khi đọc file log: {str(e)}"
+        )

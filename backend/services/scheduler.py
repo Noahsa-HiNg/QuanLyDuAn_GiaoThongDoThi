@@ -140,6 +140,33 @@ def _register_default_jobs():
     )
     log.info("📅 [APScheduler] Đã đăng ký job auto-retrain lúc 2h sáng")
 
+    # ─── JOB DETECT INCIDENTS (Task #54) ──────────────────────────────────────
+    def _job_detect_incidents():
+        """Tự động gom cụm báo cáo kẹt xe của người dân và tạo sự cố."""
+        from services.incident_detector import detect_incidents
+        from database import SessionLocal
+        log.info("⏰ [APScheduler] Job tự động phát hiện sự cố bắt đầu...")
+        db = SessionLocal()
+        try:
+            detect_incidents(db)
+        except Exception as e:
+            log.error(f"❌ [APScheduler] Job tự động phát hiện sự cố lỗi: {e}", exc_info=True)
+        finally:
+            db.close()
+
+    _scheduler.add_job(
+        func    = _job_detect_incidents,
+        trigger = CronTrigger(
+            minute = "*/10",      # mỗi 10 phút
+            second = "0",
+            timezone="Asia/Ho_Chi_Minh",
+        ),
+        id      = "auto_incident_detect",
+        name    = "🚨 Tự động phát hiện sự cố (Mỗi 10 phút)",
+        replace_existing=True,
+    )
+    log.info("📅 [APScheduler] Đã đăng ký job tự động phát hiện sự cố mỗi 10 phút")
+
 
 
 
@@ -251,9 +278,12 @@ def pause_scheduler():
 
 
 def resume_scheduler():
-    """Tiếp tục scheduler sau khi tạm dừng."""
-    _scheduler.resume()
-    log.info("▶️ [APScheduler] Scheduler đã tiếp tục")
+    """Tiếp tục scheduler sau khi tạm dừng hoặc khởi chạy nếu chưa bắt đầu."""
+    if not _scheduler.running:
+        start_scheduler()
+    else:
+        _scheduler.resume()
+    log.info("▶️ [APScheduler] Scheduler đã tiếp tục/khởi động")
 
 
 def scheduler_state() -> dict:
@@ -264,8 +294,10 @@ def scheduler_state() -> dict:
         STATE_PAUSED : "paused",
         STATE_STOPPED: "stopped",
     }
+    is_paused = _scheduler.state == STATE_PAUSED or not _scheduler.running
     return {
         "state"    : state_map.get(_scheduler.state, "unknown"),
         "running"  : _scheduler.running,
+        "paused"   : is_paused,
         "job_count": len(_scheduler.get_jobs()),
     }

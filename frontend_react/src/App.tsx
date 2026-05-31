@@ -22,12 +22,15 @@ const queryClient = new QueryClient({
   },
 });
 
+import EmergencyBannerView from './components/layout/EmergencyBannerView';
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
         <div className="flex flex-col min-h-screen bg-slate-950 text-slate-100">
           <Navbar />
+          <EmergencyBannerView />
           <main className="flex-grow">
             <Routes>
               {/* Public Routes */}

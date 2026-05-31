@@ -26,6 +26,9 @@ export interface Incident {
   start_time: string;
   end_time: string | null;
   is_active: boolean;
+  officer_id?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface User {

@@ -8,3 +8,22 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; }
 body, input, select, button, textarea { font-family: 'Plus Jakarta Sans', 'Inter', sans-serif; }
+
+/* Global warning banner layout shifts */
+nav, .route-finder-container, .min-h-screen {
+  transition: top 0.3s ease-in-out, margin-top 0.3s ease-in-out, height 0.3s ease-in-out, padding-top 0.3s ease-in-out;
+}
+
+body.has-warning-banner nav {
+  top: 36px !important;
+}
+
+body.has-warning-banner .route-finder-container {
+  margin-top: 100px !important; /* 64px (navbar) + 36px (banner) */
+  height: calc(100vh - 100px) !important;
+}
+
+body.has-warning-banner .min-h-screen.pt-20 {
+  padding-top: 116px !important; /* 80px (pt-20) + 36px (banner) */
+}
+

@@ -37,6 +37,9 @@ from config import settings
 from models import Street, TrafficData
 
 # ─── LOGGING (hiển thị giờ Đà Nẵng +07:00) ───────────────────────────────────
+import os
+os.makedirs("logs", exist_ok=True)
+
 class DaNangFormatter(logging.Formatter):
     """Formatter tùy chỉnh: in timestamp theo múi giờ Đà Nẵng (UTC+7)."""
     TZ = timezone(timedelta(hours=7))
@@ -47,7 +50,11 @@ class DaNangFormatter(logging.Formatter):
 
 handler = logging.StreamHandler()
 handler.setFormatter(DaNangFormatter("%(asctime)s [%(levelname)s] %(message)s"))
-logging.basicConfig(level=logging.INFO, handlers=[handler])
+
+file_handler = logging.FileHandler("logs/crawler.log", encoding="utf-8")
+file_handler.setFormatter(DaNangFormatter("%(asctime)s [%(levelname)s] %(message)s"))
+
+logging.basicConfig(level=logging.INFO, handlers=[handler, file_handler])
 log = logging.getLogger("ingestion")
 
 # ─── TIMEZONE ─────────────────────────────────────────────────────────────────

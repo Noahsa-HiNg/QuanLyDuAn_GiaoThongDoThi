@@ -56,6 +56,11 @@ async def predict_all_horizons(db: Session = Depends(get_db)):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Chưa có model nào sẵn sàng. Vui lòng chạy train trước.",
         )
+
+@router.get("/30min/{road_id}")
+async def predict_one(road_id: int, db: Session = Depends(get_db)):
+    if not prediction_service.is_ready:
+        raise HTTPException(status_code=503, detail="Model chưa sẵn sàng.")
     try:
         return prediction_service.predict_all_horizons(db)
     except ValueError as e:
