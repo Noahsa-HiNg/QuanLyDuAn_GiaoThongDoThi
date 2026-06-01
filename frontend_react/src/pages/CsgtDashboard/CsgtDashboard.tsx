@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { statsApi } from '../../api/stats.api';
 import { incidentsApi } from '../../api/incidents.api';
@@ -39,7 +39,20 @@ const CsgtDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [clickCoords, setClickCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [selectedOfficerId, setSelectedOfficerId] = useState<number | null>(null);
+  const [editingIncidentId, setEditingIncidentId] = useState<number | null>(null);
   const [mapFlyToCoords, setMapFlyToCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    const handleFlyTo = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.lat && customEvent.detail.lng) {
+        setMapFlyToCoords({ lat: customEvent.detail.lat, lng: customEvent.detail.lng });
+        setActiveTab('dispatch');
+      }
+    };
+    window.addEventListener('map-fly-to', handleFlyTo);
+    return () => window.removeEventListener('map-fly-to', handleFlyTo);
+  }, []);
 
   // Emergency banner states
   const [bannerTitle, setBannerTitle] = useState('');
@@ -254,6 +267,7 @@ const CsgtDashboard: React.FC = () => {
       setClickCoords(null);
       setSelectedOfficerId(null);
       setDescription('');
+      setEditingIncidentId(null);
       setSubmitError(null);
     },
     onError: (err: any) => {
@@ -269,12 +283,61 @@ const CsgtDashboard: React.FC = () => {
     },
   });
 
+  // 4b. Update Incident Mutation (for re-dispatch)
+  const updateIncidentMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => incidentsApi.updateIncident(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['activeIncidents'] });
+      queryClient.invalidateQueries({ queryKey: ['statsReport'] });
+      setIsModalOpen(false);
+      setSelectedStreet(null);
+      setClickCoords(null);
+      setSelectedOfficerId(null);
+      setDescription('');
+      setEditingIncidentId(null);
+      setSubmitError(null);
+      showAlert('Thành công', 'Đã cập nhật lệnh điều động lại thành công!', 'success');
+    },
+    onError: (err: any) => {
+      setSubmitError(err.response?.data?.detail || 'Không thể cập nhật lệnh điều phối.');
+    },
+  });
+
+  // 4c. Delete Incident Mutation (for skipping declined dispatches)
+  const deleteIncidentMutation = useMutation({
+    mutationFn: (id: number) => incidentsApi.deleteIncident(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['activeIncidents'] });
+      queryClient.invalidateQueries({ queryKey: ['statsReport'] });
+      showAlert('Đã xóa', 'Đã hủy bỏ sự cố khỏi bản đồ thành công.', 'info');
+    },
+    onError: (err: any) => {
+      showAlert('Thất bại', `Không thể xóa sự cố: ${err.response?.data?.detail || err.message}`, 'error');
+    },
+  });
+
   const handleOpenDispatch = (streetName: string, coords?: { lat: number; lng: number }) => {
     setSelectedStreet(streetName);
     setClickCoords(coords || null);
     setIsModalOpen(true);
     setDescription(`🚔 Điều phối lực lượng CSGT điều tiết giao thông tại khu vực đường ${streetName} do ùn tắc nghiêm trọng.`);
     setSelectedOfficerId(null);
+    setEditingIncidentId(null);
+  };
+
+  const handleOpenRedispatch = (incident: any) => {
+    const streetGeom = (geometry?.streets ?? []).find((s) => s.street_id === incident.street_id);
+    setSelectedStreet(streetGeom ? streetGeom.street_name : 'Không rõ');
+    setIncidentType(incident.type);
+    setSeverity(incident.severity);
+    setDescription(incident.description || '');
+    setStatus('dispatched');
+    setSelectedOfficerId(null);
+    setClickCoords({ lat: incident.latitude, lng: incident.longitude });
+    setEditingIncidentId(incident.id);
+    setIsModalOpen(true);
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -291,10 +354,9 @@ const CsgtDashboard: React.FC = () => {
       return;
     }
 
-    createIncidentMutation.mutate({
+    const payload = {
       street_id: streetGeom.street_id,
       type: incidentType,
-      start_time: new Date().toISOString(),
       severity,
       description,
       status,
@@ -302,7 +364,19 @@ const CsgtDashboard: React.FC = () => {
       latitude: clickCoords?.lat ?? null,
       longitude: clickCoords?.lng ?? null,
       officer_id: selectedOfficerId,
-    });
+    };
+
+    if (editingIncidentId !== null) {
+      updateIncidentMutation.mutate({
+        id: editingIncidentId,
+        data: payload
+      });
+    } else {
+      createIncidentMutation.mutate({
+        ...payload,
+        start_time: new Date().toISOString(),
+      });
+    }
   };
 
   // Speed Gauge Calculations (Max: 60 km/h)
@@ -491,6 +565,56 @@ const CsgtDashboard: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Declined Incidents Widget */}
+          {activeIncidents && activeIncidents.some((inc) => inc.status === 'declined') && (
+            <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-red-500/20 shadow-2xl p-6">
+              <h3 className="text-xs font-extrabold text-red-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
+                <AlertTriangle className="text-red-500 animate-pulse" size={16} />
+                Lệnh điều động bị từ chối
+              </h3>
+              <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                {activeIncidents
+                  .filter((inc) => inc.status === 'declined')
+                  .map((inc) => {
+                    const streetGeom = (geometry?.streets ?? []).find((s) => s.street_id === inc.street_id);
+                    const officer = officers.find((o: any) => o.id === inc.officer_id);
+                    return (
+                      <div key={`declined-inc-${inc.id}`} className="py-3 flex flex-col gap-2 first:pt-0 last:pb-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-red-300 block">
+                              📍 {streetGeom ? streetGeom.street_name : 'Không rõ'}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              CSGT từ chối: <b className="text-slate-300">{officer ? officer.full_name : 'Chưa rõ'}</b>
+                            </span>
+                            <p className="text-[10px] text-slate-400 mt-1 italic line-clamp-2" title={inc.description || ''}>
+                              "{inc.description}"
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => deleteIncidentMutation.mutate(inc.id)}
+                            disabled={deleteIncidentMutation.isPending}
+                            className="px-2.5 py-1.5 border border-white/10 hover:bg-white/5 text-slate-300 rounded-lg text-[10px] font-bold shadow-sm transition cursor-pointer"
+                          >
+                            Bỏ qua
+                          </button>
+                          <button
+                            onClick={() => handleOpenRedispatch(inc)}
+                            className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-[10px] font-bold shadow-sm transition cursor-pointer"
+                          >
+                            Điều động lại
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Column: Live Map and Dispatch Feed Info */}
@@ -526,12 +650,13 @@ const CsgtDashboard: React.FC = () => {
             {/* Modal Header */}
             <div className="bg-slate-950/60 border-b border-white/10 px-5 py-4 flex items-center justify-between">
               <h4 className="text-sm font-bold text-white flex items-center gap-1.5">
-                🚔 Tạo lệnh điều động tuần tra
+                {editingIncidentId !== null ? '🚔 Điều động lại lực lượng CSGT' : '🚔 Tạo lệnh điều động tuần tra'}
               </h4>
               <button
                 onClick={() => {
                   setIsModalOpen(false);
                   setSelectedStreet(null);
+                  setEditingIncidentId(null);
                   setSubmitError(null);
                 }}
                 className="text-slate-400 hover:text-white transition cursor-pointer"
@@ -622,7 +747,7 @@ const CsgtDashboard: React.FC = () => {
                 >
                   <option value="">-- Chưa phân công --</option>
                   {officers.map((off: any) => {
-                    const busy = (activeIncidents ?? []).some(
+                    const busy = off.is_busy || (activeIncidents ?? []).some(
                       (inc) => inc.officer_id === off.id && inc.status !== 'resolved'
                     );
                     return (
@@ -655,6 +780,7 @@ const CsgtDashboard: React.FC = () => {
                   onClick={() => {
                     setIsModalOpen(false);
                     setSelectedStreet(null);
+                    setEditingIncidentId(null);
                     setSubmitError(null);
                   }}
                   className="px-4 py-2 border border-white/10 rounded-lg text-xs font-semibold text-slate-400 hover:bg-white/5 transition cursor-pointer"
@@ -663,10 +789,14 @@ const CsgtDashboard: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={createIncidentMutation.isPending}
+                  disabled={createIncidentMutation.isPending || updateIncidentMutation.isPending}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {createIncidentMutation.isPending ? 'Đang gửi lệnh...' : 'Gửi lệnh đi 🚀'}
+                  {createIncidentMutation.isPending || updateIncidentMutation.isPending
+                    ? 'Đang gửi...'
+                    : editingIncidentId !== null
+                      ? 'Cập nhật & Gửi lệnh 🚀'
+                      : 'Gửi lệnh đi 🚀'}
                 </button>
               </div>
             </form>

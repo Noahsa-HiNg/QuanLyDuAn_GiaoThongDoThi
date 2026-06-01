@@ -45,7 +45,7 @@ for desc, from_s, to_s in pairs:
     else:
         print("OK  ", desc)
         print("    ", r['distance_km'], "km |", r['duration_min'], "min |", r['node_count'], "nodes")
-        streets = [s for s in r.get("streets", []) if s not in ("[intersection]", "[bridge]")]
+        streets = [s["name"] for s in r.get("streets", []) if s["name"] not in ("[intersection]", "[bridge]")]
         print("     Via:", " -> ".join(streets[:4]))
         ok += 1
 

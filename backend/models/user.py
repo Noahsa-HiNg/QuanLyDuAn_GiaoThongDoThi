@@ -59,6 +59,9 @@ class User(Base):
     # Logic: IF locked_until > NOW() → từ chối đăng nhập
     locked_until = Column(TIMESTAMP(timezone=True), nullable=True)
 
+    # Trạng thái rảnh/bận để đi làm nhiệm vụ (CSGT)
+    is_busy = Column(Boolean, default=False, nullable=False)
+
     # ─── TRACKING ────────────────────────────────────────────
 
     # Thời điểm đăng nhập gần nhất — hiển thị trên trang quản lý users

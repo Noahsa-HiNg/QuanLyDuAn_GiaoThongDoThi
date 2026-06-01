@@ -28,7 +28,7 @@ class IncidentBase(BaseModel):
     @field_validator("status")
     @classmethod
     def validate_status(cls, v: str) -> str:
-        allowed = ("active", "dispatched", "resolved")
+        allowed = ("active", "dispatched", "resolved", "declined")
         if v not in allowed:
             raise ValueError(f"Trạng thái phải thuộc: {allowed}")
         return v
@@ -68,7 +68,7 @@ class IncidentUpdate(BaseModel):
     def validate_status(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        allowed = ("active", "dispatched", "resolved")
+        allowed = ("active", "dispatched", "resolved", "declined")
         if v not in allowed:
             raise ValueError(f"Trạng thái phải thuộc: {allowed}")
         return v

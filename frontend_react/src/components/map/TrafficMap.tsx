@@ -26,7 +26,8 @@ const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number): nu
 };
 
 interface PredictionItem {
-  street_id: number;
+  street_id?: number;
+  road_id?: number;
   predicted_level: 0 | 1 | 2;
   confidence: number;
 }
@@ -47,6 +48,7 @@ interface TrafficMapProps {
   communityReports?: any[];
   showCommunityReports?: boolean;
   flyToCoords?: { lat: number; lng: number } | null;
+  fitBoundsCoords?: [number, number][] | null;
   isCsgtView?: boolean;
   onVerifyReport?: (id: number) => void;
   onVerifyCluster?: (ids: number[]) => void;
@@ -71,6 +73,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
   communityReports = [],
   showCommunityReports = false,
   flyToCoords = null,
+  fitBoundsCoords = null,
   isCsgtView = false,
   onVerifyReport,
   onVerifyCluster,
@@ -104,6 +107,19 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
       });
     }
   }, [mapInstance, flyToCoords]);
+
+  useEffect(() => {
+    const map = mapInstance;
+    if (map && fitBoundsCoords && fitBoundsCoords.length > 0) {
+      const bounds = new mapboxgl.LngLatBounds();
+      fitBoundsCoords.forEach((coord) => bounds.extend(coord as [number, number]));
+      map.fitBounds(bounds, {
+        padding: 80,
+        maxZoom: 17,
+        essential: true,
+      });
+    }
+  }, [mapInstance, fitBoundsCoords]);
 
   const onStreetClickRef = useRef(onStreetClick);
   const isReportModeRef = useRef(isReportMode);
@@ -164,7 +180,6 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
 
       const district = props.district || 'Không rõ quận';
       const speed = props.avg_speed !== null && props.avg_speed !== undefined ? `${props.avg_speed} km/h` : 'N/A';
-      const maxSpeed = props.max_speed !== null && props.max_speed !== undefined ? `${props.max_speed} km/h` : 'N/A';
       const level = props.congestion_level;
       const timeStr = props.timestamp ? fmtTimestampVN(props.timestamp) : 'N/A';
 
@@ -173,7 +188,7 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
           <h4 class="font-bold text-base text-gray-900 border-b pb-1 mb-2">${name}</h4>
           <p class="text-sm text-gray-600 mb-1"><b>Quận:</b> ${district}</p>
           <p class="text-sm text-gray-600 mb-1"><b>Trạng thái:</b> <span class="font-semibold">${getCongestionLabel(level)}</span></p>
-          <p class="text-sm text-gray-600 mb-1"><b>Tốc độ TB:</b> ${speed} (Tối đa: ${maxSpeed})</p>
+          <p class="text-sm text-gray-600 mb-1"><b>Tốc độ TB:</b> ${speed}</p>
           <p class="text-xs text-gray-400 mt-2">Cập nhật: ${timeStr}</p>
         </div>
       `;
@@ -661,10 +676,17 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
 
       // Create marker element
       const el = document.createElement('div');
-      el.className = 'incident-marker flex items-center justify-center w-8 h-8 rounded-full bg-slate-900/90 backdrop-blur-md border border-white/20 shadow-xl cursor-pointer text-sm hover:scale-110 transition-transform duration-200';
+      let markerClass = 'incident-marker flex items-center justify-center w-8 h-8 rounded-full bg-slate-900/90 backdrop-blur-md border shadow-xl cursor-pointer text-sm hover:scale-110 transition-transform duration-200';
+      if (incident.status === 'declined') {
+        markerClass += ' border-red-500 shadow-[0_0_12px_rgba(239,68,68,0.7)] animate-pulse';
+      } else {
+        markerClass += ' border-white/20';
+      }
+      el.className = markerClass;
       
       let emoji = '⚠️';
-      if (incident.type === 'accident') emoji = '🚗💥';
+      if (incident.status === 'declined') emoji = '❌';
+      else if (incident.type === 'accident') emoji = '🚗💥';
       else if (incident.type === 'roadblock') emoji = '🚧';
       else if (incident.type === 'event') emoji = '🎪';
       else if (incident.type === 'community') emoji = '👥';
@@ -678,7 +700,13 @@ const TrafficMap: React.FC<TrafficMapProps> = ({
           <strong class="block text-slate-900 font-bold mb-1">${street.street_name}</strong>
           <p class="mb-1 text-slate-600">${incident.description || 'Đang điều phối xử lý.'}</p>
           <div class="mt-2 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-            <span>Trạng thái: <b>${incident.status === 'dispatched' ? 'Đã điều động 🚔' : 'Đang xảy ra ⚠️'}</b></span>
+            <span>Trạng thái: <b>${
+              incident.status === 'declined'
+                ? '<span class="text-red-500 font-bold">Bị từ chối ❌</span>'
+                : incident.status === 'dispatched'
+                  ? 'Đã điều động 🚔'
+                  : 'Đang xảy ra ⚠️'
+            }</b></span>
           </div>
         </div>
       `);

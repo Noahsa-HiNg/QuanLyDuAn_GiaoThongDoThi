@@ -405,12 +405,25 @@ def find_route(
         st_name = ed.get("street", "")
         avg_speed = ed.get("avg_speed", 40.0)
         congestion_level = ed.get("congestion_level", 0)
+        
+        pt_a = [path[i][0], path[i][1]]
+        pt_b = [path[i + 1][0], path[i + 1][1]]
+        
         if not streets_list or streets_list[-1]["name"] != st_name:
             streets_list.append({
                 "name": st_name,
                 "congestion_level": congestion_level,
-                "avg_speed": round(avg_speed, 1)
+                "avg_speed": round(avg_speed, 1),
+                "lat": path[i][1],
+                "lng": path[i][0],
+                "path": [pt_a, pt_b]
             })
+        else:
+            curr_path = streets_list[-1]["path"]
+            if pt_a not in curr_path:
+                curr_path.append(pt_a)
+            if pt_b not in curr_path:
+                curr_path.append(pt_b)
 
     return {
         "path"              : [[lng, lat] for lng, lat in path],  # [[lng,lat],...]

@@ -71,3 +71,62 @@ def engineer_features(traffic_df):
         .apply(is_rush_hour)
     )
     return traffic_df
+
+def fetch_weather_danang() -> dict:
+    import os
+    import requests
+    import logging
+    log = logging.getLogger(__name__)
+
+    api_key = os.getenv("OPENWEATHER_API_KEY", "")
+    if not api_key:
+        return _weather_fallback()
+
+    try:
+        url = (
+            f"https://api.openweathermap.org/data/2.5/weather"
+            f"?lat=16.0544&lon=108.2022"
+            f"&appid={api_key}"
+            f"&units=metric"
+        )
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+
+        weather_id  = data["weather"][0]["id"]
+        temp        = data["main"]["temp"]
+        humidity    = data["main"]["humidity"]
+        wind_speed  = data.get("wind", {}).get("speed", 0)
+        rain_1h     = data.get("rain", {}).get("1h", 0.0)
+        visibility  = data.get("visibility", 10000) / 1000
+
+        return {
+            "temperature"    : temp,
+            "humidity"       : humidity,
+            "wind_speed"     : wind_speed,
+            "rain_1h_mm"     : rain_1h,
+            "visibility_km"  : visibility,
+            "is_raining"     : int(rain_1h > 0.1),
+            "is_heavy_rain"  : int(rain_1h > 5.0),
+            "is_foggy"       : int(visibility < 1.0),
+            "weather_id"     : weather_id,
+            "weather_group"  : _classify_weather(weather_id, rain_1h),
+        }
+    except Exception as e:
+        log.warning(f"⚠ OpenWeather API lỗi: {e} — dùng fallback")
+        return _weather_fallback()
+
+def _classify_weather(weather_id: int, rain_mm: float) -> int:
+    if weather_id == 800:          return 0
+    if 801 <= weather_id <= 804:   return 1
+    if rain_mm > 5.0:              return 3
+    if rain_mm > 0.1:              return 2
+    return 4
+
+def _weather_fallback() -> dict:
+    return {
+        "temperature": 28.0, "humidity": 75, "wind_speed": 10,
+        "rain_1h_mm": 0.0, "visibility_km": 10.0,
+        "is_raining": 0, "is_heavy_rain": 0, "is_foggy": 0,
+        "weather_id": 800, "weather_group": 0,
+    }

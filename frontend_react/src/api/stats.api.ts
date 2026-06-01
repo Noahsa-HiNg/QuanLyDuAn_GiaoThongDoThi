@@ -72,8 +72,8 @@ export const statsApi = {
     const response = await api.get<HourlyTrend[]>('/api/stats/hourly-trend', { params: { days } });
     return response.data;
   },
-  getHeatmap: async (): Promise<HeatmapItem[]> => {
-    const response = await api.get<HeatmapItem[]>('/api/stats/heatmap');
+  getHeatmap: async (days: number = 30): Promise<HeatmapItem[]> => {
+    const response = await api.get<HeatmapItem[]>('/api/stats/heatmap', { params: { days } });
     return response.data;
   },
   getWeatherCurrent: async (): Promise<WeatherCurrent> => {

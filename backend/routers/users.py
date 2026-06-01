@@ -84,6 +84,25 @@ def list_officers(
 
 
 # ─────────────────────────────────────────────────────────────
+# PUT /api/users/status — Cập nhật trạng thái bận/sẵn sàng
+# ─────────────────────────────────────────────────────────────
+@router.put(
+    "/status",
+    summary="Cập nhật trạng thái bận/sẵn sàng (CSGT/Admin)",
+)
+def update_status(
+    is_busy: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_csgt),
+):
+    """Cập nhật trạng thái hoạt động thủ công của CSGT hoặc Admin."""
+    current_user.is_busy = is_busy
+    db.commit()
+    db.refresh(current_user)
+    return {"ok": True, "is_busy": current_user.is_busy}
+
+
+# ─────────────────────────────────────────────────────────────
 # GET /api/users/{user_id} — Chi tiết 1 user
 # ─────────────────────────────────────────────────────────────
 @router.get(

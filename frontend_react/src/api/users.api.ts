@@ -26,4 +26,10 @@ export const usersApi = {
     const response = await api.get<User[]>('/api/users/officers');
     return response.data;
   },
+  updateStatus: async (isBusy: boolean): Promise<{ ok: boolean; is_busy: boolean }> => {
+    const response = await api.put<{ ok: boolean; is_busy: boolean }>('/api/users/status', null, {
+      params: { is_busy: isBusy }
+    });
+    return response.data;
+  },
 };

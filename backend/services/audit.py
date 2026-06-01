@@ -5,6 +5,7 @@ services/audit.py — Decorator ghi nhận nhật ký hệ thống (Audit Log)
 
 import functools
 import inspect
+import json
 from sqlalchemy.orm import Session
 from fastapi import Request
 from models.audit_log import AuditLog
@@ -54,12 +55,27 @@ def audit_action(action: str, target_table: str = None):
                         target_id = getattr(result, "id", None)
                         
                         detail = {}
-                        if "payload" in kwargs and hasattr(kwargs["payload"], "model_dump"):
-                            # Lọc bỏ trường nhạy cảm như password
-                            detail["payload"] = {
-                                k: v for k, v in kwargs["payload"].model_dump().items()
-                                if "password" not in k.lower()
-                            }
+                        if "payload" in kwargs:
+                            try:
+                                if hasattr(kwargs["payload"], "model_dump_json"):
+                                    payload_dict = json.loads(kwargs["payload"].model_dump_json())
+                                elif hasattr(kwargs["payload"], "model_dump"):
+                                    payload_dict = kwargs["payload"].model_dump(mode="json")
+                                elif hasattr(kwargs["payload"], "dict"):
+                                    payload_dict = json.loads(json.dumps(kwargs["payload"].dict(), default=str))
+                                else:
+                                    payload_dict = str(kwargs["payload"])
+                                
+                                if isinstance(payload_dict, dict):
+                                    detail["payload"] = {
+                                        k: v for k, v in payload_dict.items()
+                                        if "password" not in k.lower()
+                                    }
+                                else:
+                                    detail["payload"] = payload_dict
+                            except Exception as pe:
+                                print(f"[Audit Log Decorator Payload Parse Error] {pe}")
+                                detail["payload"] = str(kwargs["payload"])
 
                         log_record = AuditLog(
                             user_id=user_id,
@@ -73,6 +89,11 @@ def audit_action(action: str, target_table: str = None):
                         db.commit()
                 except Exception as e:
                     print(f"[Audit Log Decorator Error] {e}")
+                    if db:
+                        try:
+                            db.rollback()
+                        except Exception:
+                            pass
 
                 return result
             return async_wrapper
@@ -108,11 +129,27 @@ def audit_action(action: str, target_table: str = None):
                         target_id = getattr(result, "id", None)
                         
                         detail = {}
-                        if "payload" in kwargs and hasattr(kwargs["payload"], "model_dump"):
-                            detail["payload"] = {
-                                k: v for k, v in kwargs["payload"].model_dump().items()
-                                if "password" not in k.lower()
-                            }
+                        if "payload" in kwargs:
+                            try:
+                                if hasattr(kwargs["payload"], "model_dump_json"):
+                                    payload_dict = json.loads(kwargs["payload"].model_dump_json())
+                                elif hasattr(kwargs["payload"], "model_dump"):
+                                    payload_dict = kwargs["payload"].model_dump(mode="json")
+                                elif hasattr(kwargs["payload"], "dict"):
+                                    payload_dict = json.loads(json.dumps(kwargs["payload"].dict(), default=str))
+                                else:
+                                    payload_dict = str(kwargs["payload"])
+                                
+                                if isinstance(payload_dict, dict):
+                                    detail["payload"] = {
+                                        k: v for k, v in payload_dict.items()
+                                        if "password" not in k.lower()
+                                    }
+                                else:
+                                    detail["payload"] = payload_dict
+                            except Exception as pe:
+                                print(f"[Audit Log Decorator Payload Parse Error] {pe}")
+                                detail["payload"] = str(kwargs["payload"])
 
                         log_record = AuditLog(
                             user_id=user_id,
@@ -126,6 +163,11 @@ def audit_action(action: str, target_table: str = None):
                         db.commit()
                 except Exception as e:
                     print(f"[Audit Log Decorator Error] {e}")
+                    if db:
+                        try:
+                            db.rollback()
+                        except Exception:
+                            pass
 
                 return result
             return sync_wrapper

@@ -14,7 +14,7 @@ export interface CreateIncidentData {
   type: 'roadblock' | 'accident' | 'event' | 'community';
   severity: number;
   description: string;
-  status: 'active' | 'dispatched' | 'resolved';
+  status: 'active' | 'dispatched' | 'resolved' | 'declined';
   is_active: boolean;
 }
 
@@ -29,6 +29,10 @@ export const incidentsApi = {
   },
   updateIncidentStatus: async (incidentId: number, status: string): Promise<{ ok: boolean }> => {
     await api.put(`/api/incidents/${incidentId}`, { status });
+    return { ok: true };
+  },
+  updateIncident: async (incidentId: number, data: any): Promise<{ ok: boolean }> => {
+    await api.put(`/api/incidents/${incidentId}`, data);
     return { ok: true };
   },
   deleteIncident: async (incidentId: number): Promise<{ ok: boolean }> => {

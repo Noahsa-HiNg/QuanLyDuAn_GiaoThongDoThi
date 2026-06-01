@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import { incidentsApi } from '../../api/incidents.api';
+import { usersApi } from '../../api/users.api';
 import { fmtTimestampVN } from '../../utils/formatters';
 import { LogOut, User, Navigation, BarChart2, Shield, AlertCircle, Users, Calendar, Map, X } from 'lucide-react';
 
@@ -14,6 +15,20 @@ const Navbar: React.FC = () => {
   const handleLogout = () => {
     logout();
     navigate('/');
+  };
+
+  const updateStatusMutation = useMutation({
+    mutationFn: (isBusy: boolean) => usersApi.updateStatus(isBusy),
+    onSuccess: (data) => {
+      useAuthStore.getState().updateUser({ is_busy: data.is_busy });
+    },
+    onError: (err) => {
+      console.error('Lỗi khi cập nhật trạng thái:', err);
+    },
+  });
+
+  const handleToggleBusy = (busyVal: boolean) => {
+    updateStatusMutation.mutate(busyVal);
   };
 
   const queryClient = useQueryClient();
@@ -37,6 +52,15 @@ const Navbar: React.FC = () => {
 
   const acceptIncidentMutation = useMutation({
     mutationFn: (id: number) => incidentsApi.updateIncidentStatus(id, 'active'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-incidents'] });
+      queryClient.invalidateQueries({ queryKey: ['activeIncidents'] });
+      queryClient.invalidateQueries({ queryKey: ['incidents'] });
+    },
+  });
+
+  const declineIncidentMutation = useMutation({
+    mutationFn: (id: number) => incidentsApi.updateIncidentStatus(id, 'declined'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-incidents'] });
       queryClient.invalidateQueries({ queryKey: ['activeIncidents'] });
@@ -112,6 +136,21 @@ const Navbar: React.FC = () => {
       <div className="flex items-center gap-3">
         {isLoggedIn && user ? (
           <div className="flex items-center gap-4">
+            {(user.role === 'csgt' || user.role === 'admin') && (
+              <button
+                onClick={() => handleToggleBusy(!user.is_busy)}
+                disabled={updateStatusMutation.isPending}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition duration-200 cursor-pointer ${
+                  user.is_busy
+                    ? 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30'
+                    : 'bg-green-500/20 text-green-400 border-green-500/30 hover:bg-green-500/30'
+                }`}
+                title="Bấm để đổi trạng thái"
+              >
+                <span className={`h-2 w-2 rounded-full ${user.is_busy ? 'bg-red-500' : 'bg-green-500'} ${updateStatusMutation.isPending ? 'animate-ping' : 'animate-pulse'}`} />
+                {user.is_busy ? 'Đang bận' : 'Sẵn sàng'}
+              </button>
+            )}
             <div className="text-right hidden sm:block">
               <span className="block text-sm font-semibold text-slate-200">{user.full_name || user.email}</span>
               <span className="block text-[10px] font-bold text-blue-400 uppercase tracking-wider">{user.role}</span>
@@ -172,7 +211,10 @@ const Navbar: React.FC = () => {
             </p>
             <div className="flex gap-2.5 pt-1">
               <button
-                onClick={() => setDismissedIncidentIds((prev) => [...prev, inc.id])}
+                onClick={() => {
+                  declineIncidentMutation.mutate(inc.id);
+                  setDismissedIncidentIds((prev) => [...prev, inc.id]);
+                }}
                 className="flex-1 py-1.5 border border-white/10 hover:bg-white/5 text-slate-300 rounded-lg text-[10px] font-bold transition cursor-pointer"
               >
                 Bỏ qua

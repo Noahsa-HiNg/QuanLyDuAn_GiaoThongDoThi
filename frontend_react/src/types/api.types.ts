@@ -20,7 +20,7 @@ export interface Incident {
   id: number;
   street_id: number;
   type: 'roadblock' | 'accident' | 'event' | 'community';
-  status: 'active' | 'dispatched' | 'resolved';
+  status: 'active' | 'dispatched' | 'resolved' | 'declined';
   severity: 1 | 2 | 3;
   description: string | null;
   start_time: string;
@@ -38,11 +38,19 @@ export interface User {
   role: 'admin' | 'csgt' | 'user';
   is_active: boolean;
   is_locked: boolean;
+  is_busy: boolean;
 }
 
 export interface RouteResult {
   path: [number, number][];
   total_distance_m: number;
   estimated_time_min: number;
-  streets: { name: string; congestion_level: number; avg_speed: number }[];
+  streets: {
+    name: string;
+    congestion_level: number;
+    avg_speed: number;
+    lat?: number;
+    lng?: number;
+    path?: [number, number][];
+  }[];
 }

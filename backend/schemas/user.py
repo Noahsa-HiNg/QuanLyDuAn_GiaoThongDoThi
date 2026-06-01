@@ -23,6 +23,7 @@ class UserOut(BaseModel):
     failed_attempts: int
     last_login:      Optional[datetime]
     created_at:      datetime
+    is_busy:         bool = False
 
     model_config = {"from_attributes": True}
 
@@ -42,6 +43,7 @@ class OfficerOut(BaseModel):
     is_active:  bool
     last_login: Optional[datetime]
     created_at: datetime
+    is_busy:    bool = False
 
     model_config = {"from_attributes": True}
 

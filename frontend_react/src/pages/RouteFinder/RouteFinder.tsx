@@ -45,6 +45,17 @@ const RouteFinder: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  const [selectedStreetNames, setSelectedStreetNames] = useState<string[]>([]);
+  const [mapFlyToCoords, setMapFlyToCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapFitBoundsCoords, setMapFitBoundsCoords] = useState<[number, number][] | null>(null);
+
+  // Reset selected street highlights when route changes or resets
+  useEffect(() => {
+    setSelectedStreetNames([]);
+    setMapFlyToCoords(null);
+    setMapFitBoundsCoords(null);
+  }, [routeShortest, routeFastest]);
+
   // Sync inputs with store names (especially when clicking the map)
   useEffect(() => {
     setFromQuery(fromName);
@@ -148,6 +159,9 @@ const RouteFinder: React.FC = () => {
         name: st.name,
         congestion_level: st.congestion_level,
         avg_speed: st.avg_speed,
+        lat: st.lat,
+        lng: st.lng,
+        path: st.path,
       }));
   };
 
@@ -445,32 +459,55 @@ const RouteFinder: React.FC = () => {
               <ListOrdered size={12} /> Các đường đi qua ({streetStatuses.length})
             </h4>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto custom-scrollbar pr-1">
-              {streetStatuses.map((st: any, idx: number) => (
-                <div
-                  key={`route-street-${idx}`}
-                  className="bg-slate-900/40 border border-white/5 rounded-lg p-2 flex flex-col justify-between shadow-sm"
-                >
-                  <div className="text-[11px] font-semibold text-slate-200 truncate" title={st.name}>
-                    {st.name}
+              {streetStatuses.map((st: any, idx: number) => {
+                const isSelected = selectedStreetNames.includes(st.name);
+                return (
+                  <div
+                    key={`route-street-${idx}`}
+                    onClick={() => {
+                      setSelectedStreetNames((prev) => {
+                        const isCurrentlySelected = prev.includes(st.name);
+                        if (isCurrentlySelected) {
+                          setMapFitBoundsCoords(null);
+                          return prev.filter((n) => n !== st.name);
+                        } else {
+                          if (st.path && st.path.length > 0) {
+                            setMapFitBoundsCoords(st.path);
+                          } else if (st.lat && st.lng) {
+                            setMapFlyToCoords({ lat: st.lat, lng: st.lng });
+                          }
+                          return [...prev, st.name];
+                        }
+                      });
+                    }}
+                    className={`border rounded-lg p-2 flex flex-col justify-between shadow-sm cursor-pointer transition duration-200 ${
+                      isSelected
+                        ? 'border-rose-500 bg-rose-950/20 shadow-[0_0_12px_rgba(244,63,94,0.35)] ring-1 ring-rose-500/50'
+                        : 'border-white/5 bg-slate-900/40 hover:border-white/10'
+                    }`}
+                  >
+                    <div className="text-[11px] font-semibold text-slate-200 truncate" title={st.name}>
+                      {st.name}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{
+                          backgroundColor:
+                            st.congestion_level !== null
+                              ? CONGESTION_COLORS[st.congestion_level]
+                              : CONGESTION_COLORS['null'],
+                        }}
+                      />
+                      <span className="text-[9px] font-medium text-slate-400 truncate">
+                        {st.congestion_level !== null
+                          ? `${getCongestionLabel(st.congestion_level)} · ${st.avg_speed}km/h`
+                          : 'Không có data'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{
-                        backgroundColor:
-                          st.congestion_level !== null
-                            ? CONGESTION_COLORS[st.congestion_level]
-                            : CONGESTION_COLORS['null'],
-                      }}
-                    />
-                    <span className="text-[9px] font-medium text-slate-400 truncate">
-                      {st.congestion_level !== null
-                        ? `${getCongestionLabel(st.congestion_level)} · ${st.avg_speed}km/h`
-                        : 'Không có data'}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -478,9 +515,14 @@ const RouteFinder: React.FC = () => {
 
       {/* 2. Right Map Panel */}
       <div className="flex-grow h-full relative">
-        <TrafficMap hideTrafficLines={true} pageContext="route-finder">
+        <TrafficMap
+          hideTrafficLines={true}
+          pageContext="route-finder"
+          flyToCoords={mapFlyToCoords}
+          fitBoundsCoords={mapFitBoundsCoords}
+        >
           {(map) => (
-            <RouteLayer map={map} />
+            <RouteLayer map={map} selectedStreetNames={selectedStreetNames} />
           )}
         </TrafficMap>
       </div>

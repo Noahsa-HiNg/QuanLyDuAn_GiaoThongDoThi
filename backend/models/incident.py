@@ -98,7 +98,7 @@ class Incident(Base):
     __table_args__ = (
         CheckConstraint("severity IN (1, 2, 3)", name="check_severity_valid"),
         CheckConstraint(
-            "status IN ('active', 'dispatched', 'resolved')",
+            "status IN ('active', 'dispatched', 'resolved', 'declined')",
             name="check_status_valid"
         ),
         CheckConstraint(

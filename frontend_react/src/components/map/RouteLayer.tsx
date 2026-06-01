@@ -4,9 +4,10 @@ import { useMapStore } from '../../store/mapStore';
 
 interface RouteLayerProps {
   map: mapboxgl.Map;
+  selectedStreetNames?: string[];
 }
 
-const RouteLayer: React.FC<RouteLayerProps> = ({ map }) => {
+const RouteLayer: React.FC<RouteLayerProps> = ({ map, selectedStreetNames = [] }) => {
   const { fromPos, toPos, routeShortest, routeFastest, selectedMode } = useMapStore();
   const startMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const endMarkerRef = useRef<mapboxgl.Marker | null>(null);
@@ -174,6 +175,98 @@ const RouteLayer: React.FC<RouteLayerProps> = ({ map }) => {
         if (map.getSource('route')) map.removeSource('route');
       } catch (e) {}
     };
+  }, [map, routeShortest, routeFastest, selectedMode]);
+
+  // 3. Draw Selected Street Highlights
+  useEffect(() => {
+    const updateHighlights = () => {
+      const activeRoute = selectedMode === 'shortest' ? routeShortest : routeFastest;
+      const highlightFeatures: GeoJSON.Feature[] = [];
+
+      if (activeRoute && activeRoute.streets && selectedStreetNames && selectedStreetNames.length > 0) {
+        activeRoute.streets.forEach((st: any) => {
+          if (selectedStreetNames.includes(st.name) && st.path && st.path.length > 0) {
+            highlightFeatures.push({
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: st.path,
+              },
+            });
+          }
+        });
+      }
+
+      const highlightGeoJSON: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: highlightFeatures,
+      };
+
+      const hlSource = map.getSource('route-highlight');
+      if (hlSource) {
+        (hlSource as mapboxgl.GeoJSONSource).setData(highlightGeoJSON);
+      } else {
+        map.addSource('route-highlight', {
+          type: 'geojson',
+          data: highlightGeoJSON,
+        });
+
+        map.addLayer({
+          id: 'route-highlight-glow',
+          type: 'line',
+          source: 'route-highlight',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round',
+          },
+          paint: {
+            'line-color': '#f43f5e', // Vibrant rose/neon pink color for highlighting
+            'line-width': 12,
+            'line-opacity': 0.4,
+          },
+        });
+
+        map.addLayer({
+          id: 'route-highlight-core',
+          type: 'line',
+          source: 'route-highlight',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round',
+          },
+          paint: {
+            'line-color': '#fda4af', // Lighter neon pink core
+            'line-width': 6,
+            'line-opacity': 0.95,
+          },
+        });
+      }
+    };
+
+    if (map.isStyleLoaded()) {
+      updateHighlights();
+    } else {
+      map.on('style.load', updateHighlights);
+    }
+
+    return () => {
+      try {
+        map.off('style.load', updateHighlights);
+      } catch (e) {}
+    };
+  }, [map, selectedStreetNames, routeShortest, routeFastest, selectedMode]);
+
+  // 4. Handle Clears & Resets
+  useEffect(() => {
+    const activeRoute = selectedMode === 'shortest' ? routeShortest : routeFastest;
+    if (!activeRoute || !activeRoute.path || activeRoute.path.length === 0) {
+      try {
+        if (map.getLayer('route-highlight-glow')) map.removeLayer('route-highlight-glow');
+        if (map.getLayer('route-highlight-core')) map.removeLayer('route-highlight-core');
+        if (map.getSource('route-highlight')) map.removeSource('route-highlight');
+      } catch (e) {}
+    }
   }, [map, routeShortest, routeFastest, selectedMode]);
 
   return null; // Component does not render DOM itself

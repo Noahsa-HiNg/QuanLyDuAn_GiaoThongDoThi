@@ -263,6 +263,11 @@ def get_hourly_trend(
             end_time = datetime.combine(target_date, datetime.max.time()).replace(tzinfo=TZ_DANANG)
         except ValueError:
             raise HTTPException(status_code=400, detail="Định dạng ngày không hợp lệ, yêu cầu YYYY-MM-DD")
+    elif days == 0:
+        # "Hiện tại" -> từ 0h hôm nay đến giờ hiện tại
+        now_local = datetime.now(TZ_DANANG)
+        start_time = datetime.combine(now_local.date(), datetime.min.time()).replace(tzinfo=TZ_DANANG)
+        end_time = now_local
     else:
         # past 'days' days
         now = datetime.now(timezone.utc)
@@ -304,7 +309,11 @@ def get_hourly_trend(
             }
             
     results = []
-    for h in range(24):
+    max_hour = 23
+    if date_str is None and days == 0:
+        max_hour = datetime.now(TZ_DANANG).hour
+
+    for h in range(max_hour + 1):
         results.append(HourlyTrendPoint(
             hour=h,
             avg_speed=trend_dict[h]["avg_speed"],
@@ -393,9 +402,17 @@ def get_stats_report(db: Session = Depends(get_db)):
     summary="Bản đồ nhiệt kẹt xe theo thứ và giờ",
     description="Trả về tỷ lệ kẹt xe trung bình phân loại theo Thứ trong tuần (0=Thứ 2, 6=Chủ nhật) và Giờ trong ngày (0-23).",
 )
-def get_stats_heatmap(db: Session = Depends(get_db)):
-    now = datetime.now(timezone.utc)
-    start_time = now - timedelta(days=30)
+def get_stats_heatmap(
+    days: int = Query(30, description="Số ngày gần nhất cần thống kê"),
+    db: Session = Depends(get_db)
+):
+    if days == 0:
+        # "Hiện tại" -> từ 0h hôm nay
+        now_local = datetime.now(TZ_DANANG)
+        start_time = datetime.combine(now_local.date(), datetime.min.time()).replace(tzinfo=TZ_DANANG)
+    else:
+        now = datetime.now(timezone.utc)
+        start_time = now - timedelta(days=days)
 
     query_str = """
         SELECT 
