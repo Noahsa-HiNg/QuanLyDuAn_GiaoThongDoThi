@@ -36,4 +36,18 @@ export const trafficApi = {
     const response = await api.get<PredictionResponse[]>('/api/predict/30min');
     return response.data;
   },
+  chat: async (message: string, history: ChatMessage[]): Promise<ChatResponse> => {
+    const response = await api.post<ChatResponse>('/api/traffic/chat', { message, history });
+    return response.data;
+  },
 };
+
+export interface ChatMessage {
+  role: 'user' | 'model';
+  content: string;
+}
+
+export interface ChatResponse {
+  response: string;
+}
+

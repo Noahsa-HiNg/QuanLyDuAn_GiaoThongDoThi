@@ -13,7 +13,8 @@ import {
   RefreshCw, 
   Database,
   ArrowRight,
-  Terminal
+  Terminal,
+  Brain
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -61,6 +62,35 @@ const AdminScheduler: React.FC = () => {
     queryKey: ['crawlLogs'],
     queryFn: () => schedulerApi.getCrawlLogs(150),
     refetchInterval: 10000,
+  });
+
+  const { data: modelMetrics, refetch: refetchMetrics } = useQuery({
+    queryKey: ['modelMetrics'],
+    queryFn: () => schedulerApi.getModelMetrics(),
+    refetchInterval: 30000,
+  });
+
+  const { data: modelStatus, refetch: refetchStatus } = useQuery({
+    queryKey: ['modelStatus'],
+    queryFn: () => schedulerApi.getModelStatus(),
+    refetchInterval: 30000,
+  });
+
+  const [runJobSuccessMsg, setRunJobSuccessMsg] = useState<string | null>(null);
+
+  const runJobMutation = useMutation({
+    mutationFn: (jobId: string) => schedulerApi.runJobNow(jobId),
+    onSuccess: (res, jobId) => {
+      queryClient.invalidateQueries({ queryKey: ['schedulerJobs'] });
+      setRunJobSuccessMsg(`⚡ Đã gửi yêu cầu kích hoạt chạy tác vụ #${jobId} thành công!`);
+      setTimeout(() => setRunJobSuccessMsg(null), 5500);
+      if (jobId === 'auto_retrain') {
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['modelMetrics'] });
+          queryClient.invalidateQueries({ queryKey: ['modelStatus'] });
+        }, 3000);
+      }
+    },
   });
 
   const logEndRef = React.useRef<HTMLDivElement>(null);
@@ -136,6 +166,8 @@ const AdminScheduler: React.FC = () => {
               queryClient.invalidateQueries({ queryKey: ['schedulerState'] });
               queryClient.invalidateQueries({ queryKey: ['schedulerJobs'] });
               queryClient.invalidateQueries({ queryKey: ['crawlStatus'] });
+              queryClient.invalidateQueries({ queryKey: ['modelMetrics'] });
+              queryClient.invalidateQueries({ queryKey: ['modelStatus'] });
             }}
             className="p-2 border border-white/10 bg-slate-900/60 rounded-lg text-slate-400 hover:bg-white/5 transition cursor-pointer"
             title="Làm mới trạng thái"
@@ -384,6 +416,97 @@ const AdminScheduler: React.FC = () => {
         )}
       </div>
 
+      {/* AI Model Training & Metrics Panel */}
+      <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <div>
+            <h3 className="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <Brain size={16} className="text-pink-400" />
+              Thông số Huấn luyện AI Models dự báo kẹt xe
+            </h3>
+            <p className="text-xs text-slate-450 mt-1">
+              Đồng bộ dữ liệu thực tế TomTom để huấn luyện định kỳ các mô hình dự báo AI (LightGBM, XGBoost, CatBoost).
+            </p>
+          </div>
+
+          <button
+            onClick={() => runJobMutation.mutate('auto_retrain')}
+            disabled={runJobMutation.isPending && runJobMutation.variables === 'auto_retrain'}
+            className="px-4 py-2 bg-pink-600 hover:bg-pink-550 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {runJobMutation.isPending && runJobMutation.variables === 'auto_retrain' ? (
+              <>
+                <RefreshCw size={14} className="animate-spin" />
+                Đang huấn luyện lại...
+              </>
+            ) : (
+              <>
+                <Brain size={14} /> Huấn luyện lại tất cả Model
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Model info cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          {['10min', '20min', '30min'].map((horizon) => {
+            const label = horizon === '10min' ? 'Dự báo 10 Phút' : horizon === '20min' ? 'Dự báo 20 Phút' : 'Dự báo 30 Phút';
+            const metrics = modelMetrics?.[horizon];
+            const status = modelStatus?.[horizon];
+            const isReady = status?.ready;
+
+            return (
+              <div key={`model-card-${horizon}`} className="bg-slate-950/60 rounded-xl border border-white/5 p-4 flex flex-col justify-between space-y-3">
+                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                  <span className="text-xs font-bold text-slate-350">{label}</span>
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold tracking-wider ${
+                    isReady ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                  }`}>
+                    {isReady ? 'SẴN SÀNG' : 'CHƯA TRAIN'}
+                  </span>
+                </div>
+
+                {metrics && !metrics.error ? (
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Mô hình tốt nhất:</span>
+                      <span className="font-mono text-blue-400 font-bold">{metrics.model_name || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Weighted F1-score:</span>
+                      <span className="font-bold text-green-400">
+                        {metrics.f1_score ? `${(metrics.f1_score * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Độ chính xác:</span>
+                      <span className="font-bold text-slate-300">
+                        {metrics.accuracy ? `${(metrics.accuracy * 100).toFixed(1)}%` : 'N/A'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-1 text-[10px] text-slate-500 border-t border-white/5 mt-1.5">
+                      <span>Cập nhật cuối:</span>
+                      <span>{metrics.trained_at ? fmtTimestampVN(metrics.trained_at) : 'N/A'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-slate-500 text-xs italic">
+                    {metrics?.error || 'Chưa huấn luyện hoặc đang cập nhật dữ liệu...'}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {runJobSuccessMsg && (
+        <div className="p-3.5 bg-green-950/40 border border-green-500/30 text-green-400 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fade-in">
+          <CheckCircle size={16} />
+          {runJobSuccessMsg}
+        </div>
+      )}
+
       {/* Scheduler Jobs List */}
       <div className="bg-slate-900/60 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-white/10 bg-slate-950/40">
@@ -406,6 +529,7 @@ const AdminScheduler: React.FC = () => {
                   <th className="px-6 py-4">Tên tác vụ</th>
                   <th className="px-6 py-4">Chu kỳ kích hoạt</th>
                   <th className="px-6 py-4">Lần chạy tiếp theo</th>
+                  <th className="px-6 py-4 w-32">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -427,6 +551,21 @@ const AdminScheduler: React.FC = () => {
                       ) : (
                         <span className="text-red-400 font-semibold italic">Tạm dừng / Hủy kích hoạt</span>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => runJobMutation.mutate(job.id)}
+                        disabled={runJobMutation.isPending && runJobMutation.variables === job.id}
+                        className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-550 text-white rounded text-[10px] font-bold shadow-sm transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        title="Chạy ngay lập tức"
+                      >
+                        {runJobMutation.isPending && runJobMutation.variables === job.id ? (
+                          <RefreshCw size={10} className="animate-spin" />
+                        ) : (
+                          <Play size={10} />
+                        )}
+                        Chạy ngay
+                      </button>
                     </td>
                   </tr>
                 ))}

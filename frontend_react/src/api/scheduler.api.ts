@@ -51,7 +51,39 @@ export const schedulerApi = {
     const response = await api.get<CrawlStatsResponse>('/api/traffic/crawl/stats');
     return response.data;
   },
+  runJobNow: async (jobId: string): Promise<{ ok: boolean; data?: any }> => {
+    const response = await api.post(`/api/traffic/schedule/run-now/${jobId}`);
+    return { ok: true, data: response.data };
+  },
+  getModelMetrics: async (): Promise<ModelMetricsResponse> => {
+    const response = await api.get<ModelMetricsResponse>('/api/predict/metrics');
+    return response.data;
+  },
+  getModelStatus: async (): Promise<ModelStatus> => {
+    const response = await api.get<ModelStatus>('/api/predict/status');
+    return response.data;
+  },
 };
+
+export interface ModelStatus {
+  [horizon: string]: {
+    ready: boolean;
+    label: string;
+  };
+}
+
+export interface ModelMetricDetails {
+  model_name?: string;
+  accuracy?: number;
+  f1_score?: number;
+  best_params?: any;
+  trained_at?: string;
+  error?: string;
+}
+
+export interface ModelMetricsResponse {
+  [horizon: string]: ModelMetricDetails;
+}
 
 export interface CrawlKPIs {
   total_runs: number;

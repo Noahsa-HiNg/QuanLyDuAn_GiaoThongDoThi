@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Menu, X, RotateCcw, AlertTriangle, Thermometer, CloudRain, Shield, RefreshCw, MapPin, HelpCircle } from 'lucide-react';
+import { Menu, X, RotateCcw, AlertTriangle, Thermometer, CloudRain, Shield, RefreshCw, MapPin, HelpCircle, Bot } from 'lucide-react';
 import TrafficMap from '../../components/map/TrafficMap';
 import { UserTour } from '../../components/map/UserTour';
 import { trafficApi } from '../../api/traffic.api';
@@ -1099,6 +1099,19 @@ const Home: React.FC = () => {
         title="Hướng dẫn sử dụng"
       >
         <HelpCircle size={20} />
+      </button>
+
+      {/* Chatbot map toggle button */}
+      <button
+        id="btn-chatbot-toggle"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent('chat-widget-toggle'));
+        }}
+        style={{ top: hasActiveAlert ? '564px' : '528px' }}
+        className="absolute left-4 z-30 w-11 h-11 flex items-center justify-center rounded-full bg-slate-900/80 hover:bg-slate-800/80 text-slate-200 hover:text-white backdrop-blur-sm border border-white/10 shadow-lg transition-all duration-300 cursor-pointer"
+        title="Trợ lý ảo AI"
+      >
+        <Bot size={20} />
       </button>
 
       {/* Proximity Alert Toast (S5-56) */}

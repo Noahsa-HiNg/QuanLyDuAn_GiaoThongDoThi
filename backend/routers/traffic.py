@@ -41,6 +41,8 @@ from redis_client import redis_client     # Dùng trực tiếp cho geometry/sta
 
 from auth.dependencies import require_csgt, require_admin
 from models.user import User
+from schemas.chat import ChatRequest, ChatResponse
+from services.chat_service import chat_with_gemini
 
 router = APIRouter()
 
@@ -1570,3 +1572,17 @@ def get_crawl_stats(
         "last_runs": detailed_runs[-50:],  # last 50 runs for charts
         "daily_stats": daily_stats[-7:],   # last 7 days for bar charts
     }
+
+
+@router.post(
+    "/traffic/chat",
+    response_model=ChatResponse,
+    summary="Hội thoại với Trợ lý AI qua Gemini API",
+    description="Nhận tin nhắn mới nhất và lịch sử hội thoại, gọi Gemini để sinh phản hồi."
+)
+def chat_traffic(req: ChatRequest, db: Session = Depends(get_db)):
+    # Định dạng lại lịch sử về dạng List[Dict]
+    history_dicts = [{"role": msg.role, "content": msg.content} for msg in req.history]
+    answer = chat_with_gemini(db, req.message, history_dicts)
+    return ChatResponse(response=answer)
+

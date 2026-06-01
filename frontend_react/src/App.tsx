@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Navbar from './components/layout/Navbar';
 import { RouteGuard } from './components/layout/RouteGuard';
+import Chatbot from './components/chatbot/Chatbot';
 
 // Pages
 import Home from './pages/Home/Home';
@@ -82,6 +83,7 @@ function App() {
               />
             </Routes>
           </main>
+          <Chatbot />
         </div>
       </Router>
     </QueryClientProvider>

@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     # Single key (backward-compat)
     tomtom_api_key: str = ""     # Key chính
     goong_api_key: str = ""      # Đăng ký tại docs.goong.io (1000 req/ngày free)
+    gemini_api_key: str = ""     # Google Gemini API Key
 
     # Multi-key TomTom: điền nhiều key cách nhau bằng dấu phẩy
     # Ví dụ: TOMTOM_API_KEYS=key1,key2,key3
